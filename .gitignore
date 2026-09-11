@@ -1,0 +1,14 @@
+# Byte-compiled Python
+__pycache__/
+*.py[cod]
+
+# PyInstaller output - regenerate with `python build.py`
+/build/
+/dist/
+*.spec
+
+# Written by make_launcher.py; stores absolute paths, so it is machine-specific
+*.lnk
+
+# Excel lock files
+~$*.xlsx

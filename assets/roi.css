@@ -1,0 +1,195 @@
+/* ROI Model - Dash front end.
+   Same design language as the desktop app: soft neutral page, white cards
+   with a low shadow, one emerald accent, a deep slate hero. */
+
+:root {
+  --page:    #eef1f5;
+  --card:    #ffffff;
+  --hero:    #101828;
+  --hero-2:  #1d2939;
+  --ink:     #0f172a;
+  --ink-2:   #334155;
+  --muted:   #8794a7;
+  --muted-2: #64748b;
+  --hair:    #e8ecf1;
+  --accent:  #059669;
+  --accent-2:#10b981;
+  --accent-hi:#34d399;
+  --accent-bg:#ecfdf5;
+  --neg:     #e11d48;
+  --track:   #e6eaf0;
+  --sub:     #f8fafc;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+               "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1680px; margin: 0 auto; padding: 22px 26px 34px; }
+
+/* ------------------------------------------------------------- header --- */
+.head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.head h1 {
+  margin: 0; font-size: 26px; font-weight: 350; letter-spacing: -0.2px;
+  color: var(--ink);
+}
+.head .sub { margin: 3px 0 0; font-size: 13px; color: var(--muted-2); }
+.head .spacer { flex: 1; }
+
+.btn {
+  appearance: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600;
+  padding: 9px 18px; border-radius: 9px;
+  background: var(--card); color: var(--ink-2);
+  box-shadow: 0 1px 2px rgba(16,24,40,.10), 0 1px 1px rgba(16,24,40,.04);
+  transition: background .12s ease, box-shadow .12s ease;
+}
+.btn:hover { background: #f5f7fa; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary:hover { background: #047857; }
+
+/* -------------------------------------------------------------- layout -- */
+.grid { display: grid; grid-template-columns: 404px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1180px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--card); border-radius: 14px; padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(16,24,40,.09), 0 6px 16px -6px rgba(16,24,40,.10);
+}
+.stack { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---------------------------------------------------------------- hero -- */
+.hero {
+  background: var(--hero); border-radius: 14px; padding: 26px 28px;
+  display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
+  box-shadow: 0 1px 3px rgba(16,24,40,.16), 0 10px 24px -8px rgba(16,24,40,.28);
+}
+.hero .lede { flex: 1 1 300px; }
+.eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--accent-hi); margin: 0;
+}
+.roi { font-size: 62px; font-weight: 300; line-height: 1.02; margin: 8px 0 6px;
+       color: var(--accent-hi); letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
+.roi.neg { color: #fb7185; }
+.hero .note { margin: 0; font-size: 12.5px; color: #7c8aa0; }
+
+.stats { display: flex; gap: 0; flex-wrap: wrap; }
+.stat { padding: 0 22px; border-left: 1px solid var(--hero-2); }
+.stat:first-child { border-left: 0; padding-left: 0; }
+.stat .k {
+  font-size: 10px; font-weight: 700; letter-spacing: 1.3px;
+  text-transform: uppercase; color: #69788e; margin: 0 0 6px;
+}
+.stat .v { font-size: 21px; font-weight: 350; color: #e9eef5; margin: 0;
+           font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat .v.neg { color: #fb7185; }
+
+/* ----------------------------------------------------------- controls --- */
+.section + .section { border-top: 1px solid var(--hair); margin-top: 22px; padding-top: 20px; }
+.section h2 {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 16px;
+}
+
+.ctl { margin-bottom: 20px; }
+.ctl:last-child { margin-bottom: 0; }
+/* A group is a lead slider plus its toggle and per-year panel; without this
+   its toggle crowds the label of whatever control follows. */
+.ctl-group { margin-bottom: 20px; }
+.ctl-group:last-child { margin-bottom: 0; }
+.ctl-group .ctl:last-child { margin-bottom: 0; }
+.ctl .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ctl label { font-size: 13.5px; color: var(--ink-2); }
+.ends { display: flex; justify-content: space-between; font-size: 11px;
+        color: var(--muted); margin-top: 2px; }
+.ends .mid { color: var(--muted); }
+
+.per-year { background: var(--sub); border-radius: 10px; padding: 6px 14px 14px; margin-top: 12px; }
+
+/* Dash 4 ships its own slider (Radix-based, not rc-slider). It is themed
+   through CSS custom properties, so override those rather than fight
+   specificity; the direct rules below only adjust sizing. */
+:root {
+  --Dash-Fill-Interactive-Strong: var(--accent);
+  --Dash-Fill-Interactive-Weak: rgba(5,150,105,.14);
+  --Dash-Fill-Disabled: var(--track);
+  --Dash-Fill-Inverse-Strong: #f1f4f8;
+  --Dash-Stroke-Strong: transparent;
+  --Dash-Stroke-Weak: transparent;
+  --Dash-Text-Primary: var(--ink);
+}
+
+.dash-slider-container { gap: 14px; }
+.dash-slider-root { height: 12px; padding: 12px 0; }
+.dash-slider-root .dash-slider-track { height: 5px; background-color: var(--track); }
+.dash-slider-root .dash-slider-range { background-color: var(--accent); }
+.dash-slider-root .dash-slider-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(16,24,40,.30);
+  transition: box-shadow .12s ease, border-color .12s ease;
+}
+.dash-slider-root .dash-slider-thumb:hover,
+.dash-slider-root .dash-slider-thumb:focus,
+.dash-slider-root .dash-slider-thumb:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 6px rgba(5,150,105,.16), 0 1px 3px rgba(16,24,40,.30);
+  outline: none;
+}
+
+/* The numeric box is a bare <input> carrying both classes, and Dash injects
+   its own rules at runtime - so qualify ours to win on specificity rather
+   than on source order. Its width is set inline, so leave that alone. */
+.ctl .dash-input-container {
+  height: 30px; border: 0; border-radius: 7px; background: #f1f4f8;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; text-align: center;
+  padding: 0 6px; box-shadow: none;
+}
+.ctl .dash-input-container:focus,
+.ctl .dash-input-container:focus-visible {
+  outline: none; box-shadow: 0 0 0 2px rgba(5,150,105,.35);
+}
+.per-year .dash-input-container { background: #e9eef4; }
+
+/* toggle */
+.toggle { margin-top: 10px; }
+.toggle label { display: inline-flex; align-items: center; gap: 7px;
+                font-size: 12px; color: var(--accent); cursor: pointer; }
+.toggle input { accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer; }
+
+/* --------------------------------------------------------------- table -- */
+.tbl-wrap { overflow-x: auto; }
+table.model { border-collapse: collapse; width: 100%; table-layout: fixed;
+              font-variant-numeric: tabular-nums; }
+table.model th {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--muted); text-align: right; padding: 0 8px 12px; white-space: nowrap;
+}
+table.model th:first-child { text-align: left; }
+table.model td {
+  font-size: 13.5px; color: var(--ink-2); text-align: right;
+  padding: 7px 8px; white-space: nowrap;
+}
+table.model td:first-child { text-align: left; color: var(--ink-2); }
+table.model tr.r-head td { font-weight: 600; color: var(--ink); }
+table.model tr.r-soft td { color: var(--muted); }
+table.model tr.r-cash td { font-weight: 600; color: var(--ink); background: var(--accent-bg); }
+table.model tr.r-cash td:first-child { border-radius: 7px 0 0 7px; }
+table.model tr.r-cash td:last-child { border-radius: 0 7px 7px 0; }
+
+/* --------------------------------------------------------------- chart -- */
+.chart-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 6px;
+}
+.js-plotly-plot .plotly .modebar { display: none; }
