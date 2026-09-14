@@ -522,10 +522,14 @@ class RosterRow(ttk.Frame):
 
 # ================================================================ slider ====
 class Slider(ttk.Frame):
-    """Label, value field and a custom-drawn track. Values are display units."""
+    """Label, value field and a custom-drawn track. Values are display units.
+
+    With track=False only the label and field are drawn: the value is typed,
+    not dragged, so it can take a fine step no track could land on."""
 
     def __init__(self, parent, label, lo, hi, step, initial, kind, on_change,
-                 sub=None, style="Card.TFrame", bg=CARD, field="#f1f4f8"):
+                 sub=None, style="Card.TFrame", bg=CARD, field="#f1f4f8",
+                 track=True):
         super().__init__(parent, style=style)
         self.lo, self.hi, self.step, self.kind = lo, hi, step, kind
         self.on_change = on_change
@@ -538,8 +542,13 @@ class Slider(ttk.Frame):
         ttk.Label(head, text=label,
                   style="Param.TLabel" if bg == CARD else "ParamSub.TLabel"
                   ).pack(side="left")
-        self.field = PillEntry(head, 76, self._from_entry, bg=bg, field=field)
+        self.field = PillEntry(head, 76 if track else 110, self._from_entry,
+                               bg=bg, field=field)
         self.field.pack(side="right")
+        self.cv = None
+        if not track:
+            self._sync_field()
+            return
 
         self.kd = px(16)
         self.th = px(5)
@@ -593,6 +602,8 @@ class Slider(ttk.Frame):
 
     # -- geometry --------------------------------------------------------
     def _redraw(self):
+        if self.cv is None:
+            return
         w = self.cv.winfo_width()
         if w <= 1:
             return
@@ -990,8 +1001,8 @@ class App(tk.Tk):
         self.s_term.pack(fill="x")
 
         g = self._group(inner, "Revenue")
-        self.s_revenue = Slider(g, "Gross Revenue (Year 0)", 50_000, 5_000_000,
-                                10_000, d["gross_revenue"], "money", r)
+        self.s_revenue = Slider(g, "Gross Revenue (Year 0)", 0, 1_000_000_000,
+                                1, d["gross_revenue"], "money", r, track=False)
         self.s_revenue.pack(fill="x", pady=(0, px(16)))
         self.g_growth = SliderGroup(g, "Revenue Growth", -10, 30, 0.25,
                                     d["rev_growth"], r, per_year_only=True)

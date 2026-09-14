@@ -15,7 +15,8 @@ outlay:
     Gross Revenue    Y0 = input, Yn = Yn-1 * (1 + growth_n)
     Commission       = Gross Revenue * commission %
     Net Revenue      = Gross Revenue - Commission
-    COGS             = Net Revenue * COGS_n %
+    COGS             = SUM over categories of
+                       Gross Revenue * sales mix % * that category's COGS %
     Payroll          roster * (1 + merit)^(n-1) + incentive % * Gross
                      + profit sharing % * Net Revenue
     Expenses         = Net Revenue * expenses_n %
@@ -76,6 +77,11 @@ CATEGORIES = [
     "Power Income",
     "HSIA Income",
 ]
+
+# COGS is charged against each category's own revenue at its own rate - the
+# workbook's COGS block - rather than against net revenue as a whole. A
+# category can cost more to deliver than it earns: logistics runs over 200%.
+COGS_CATEGORIES = [c.replace("Income", "COGS") for c in CATEGORIES]
 
 # Payroll is built from a staffing roster on the workbook's "Payroll
 # Calculation" tab: each role costs salary plus a benefit load, the whole
@@ -147,6 +153,14 @@ DEFAULTS = {
     "sales_mix": [40.03, 56.11, 1.96,
                   0.00, 0.14, 0.02,
                   0.00, 1.74],
+    # % of its own revenue each category costs to deliver. HSIA carries
+    # no COGS line in the workbook, so it opens at zero.
+    "cogs_rates": [5.7935110089355035, 2.5096111625799625,
+                   233.38736465304426, 132.34178460164383,
+                   26.425039362565006, 20.596761439824368,
+                   7.308621001605296, 0.0],
+    # Fallback for callers that do not model the categories: a single
+    # COGS rate applied to net revenue.
     "cogs": 10.0,             # % of net revenue
     "expenses": 6.5,          # % of net revenue
     "staff_titles": [t for _, t, _, _, _ in STAFF],
@@ -228,12 +242,26 @@ ROWS = [
     ("Cumulative Net Cash", "cumulative", "money"),
 ]
 
+# The workbook's COGS block: one line per income category, sitting under the
+# COGS total. Front ends that model the categories splice these in; the ones
+# that drive COGS off a single rate leave ROWS as it is.
+COGS_ROWS = [(label, f"cogs_{i}", "money")
+             for i, label in enumerate(COGS_CATEGORIES)]
+COGS_KEYS = {key for _, key, _ in COGS_ROWS}
+
 # Year 0 only carries these lines in the workbook; the rest stay blank.
 YEAR0 = {"rev", "capex", "invest", "net_cash", "cumulative"}
 
 # The reverse: lines the workbook computes for year 0 alone. Initial
 # Investment is a one-off, so the operating years are left blank.
 ONLY_YEAR0 = {"invest"}
+
+
+def cogs_rates_of(p):
+    """The per-category COGS rates a parameter set drives COGS off, or None
+    when it only carries the single net-revenue rate."""
+    rates, mix = p.get("cogs_rates"), p.get("sales_mix")
+    return list(rates) if rates and mix else None
 
 
 def commission_of(p):
@@ -260,7 +288,11 @@ def compute(p):
     weight = term_weights(term)     # weight[t - 1] is operating year t's share
 
     growth = as_years(p["rev_growth"], n)
-    cogs_pct = as_years(p["cogs"], n)
+    cogs_pct = as_years(p.get("cogs", 0.0), n)
+    # Category rates win when they are there; the flat rate is the fallback
+    # for front ends that do not break revenue down by category.
+    cogs_rates = cogs_rates_of(p)
+    mix = p.get("sales_mix") or []
     exp_pct = as_years(p["expenses"], n)
     capex_pct = as_years(p["capex"], n)
     comm_pct = commission_of(p)
@@ -279,6 +311,8 @@ def compute(p):
     z = [0.0] * (n + 1)
     rev, comm, net_rev = z[:], z[:], z[:]
     cogs, payroll, expenses = z[:], z[:], z[:]
+    # One series per category, so the COGS total can be shown broken out.
+    cogs_lines = [z[:] for _ in (cogs_rates or [])]
     noi, capex = z[:], z[:]
     rate = z[:]
 
@@ -293,7 +327,15 @@ def compute(p):
         rev[t] = rate[t] * weight[t - 1]
         comm[t] = rev[t] * comm_pct / 100.0
         net_rev[t] = rev[t] - comm[t]
-        cogs[t] = net_rev[t] * cogs_pct[t - 1] / 100.0
+        if cogs_rates:
+            # Each category's own revenue - gross, before commission -
+            # costed at its own rate, then summed. The workbook's C12:C18.
+            for i, cogs_rate in enumerate(cogs_rates):
+                cat_rev = rev[t] * (mix[i] if i < len(mix) else 0.0) / 100.0
+                cogs_lines[i][t] = cat_rev * cogs_rate / 100.0
+            cogs[t] = sum(line[t] for line in cogs_lines)
+        else:
+            cogs[t] = net_rev[t] * cogs_pct[t - 1] / 100.0
         expenses[t] = net_rev[t] * exp_pct[t - 1] / 100.0
 
     # Roster escalated by merit, plus the revenue-linked overlays. The
@@ -392,7 +434,7 @@ def compute(p):
     span_net = sum(net_rev[1:])
     avg_margin = (sum(noi[1:]) / span_net) if span_net else 0.0
 
-    return {
+    out = {
         "term": term, "years": n, "weights": weight, "rate": rate,
         "commission_pct": comm_pct, "staff_base": base,
         "invest": invest, "amort": amort,
@@ -406,6 +448,14 @@ def compute(p):
         "_growth": [0.0] + [g / 100.0 for g in growth],
         "total": total, "roi": roi, "payback": payback,
     }
+    # The COGS block, keyed to match COGS_ROWS. Absent when COGS is driven
+    # off the single net-revenue rate, since there is nothing to split.
+    out.update({f"cogs_{i}": line for i, line in enumerate(cogs_lines)})
+    # What the category rates come to as a share of net revenue, so the flat
+    # rate the other front end shows stays comparable.
+    out["cogs_pct"] = [cogs[t] / net_rev[t] if net_rev[t] else 0.0
+                       for t in range(n + 1)]
+    return out
 
 
 def money(v):

@@ -12,29 +12,32 @@ Layout of a scenario sheet (column D is Year 0, J is Year 6):
     row  7  Commission         = gross revenue * commission %
     row  8  Commission %       input in E, E..J locked to it
     row 11  Net Revenue        = gross revenue - commission
-    row 13  COGS               = net revenue * COGS %
-    row 14  COGS %             input, per year
-    row 17  Payroll            Y1 = net revenue * %, then grown each year
-    row 18  Payroll % / growth  input: Y1 is a share, Y2..Y6 are growth rates
-    row 21  Expenses           = net revenue * expenses %
-    row 22  Expenses %         input, per year
-    row 24  NOI                = net revenue - COGS - payroll - expenses
-    row 25  NOI Margin         = NOI / net revenue
-    row 28  Capex Investment   Y0 = gross revenue Y0 * %, then revenue * %
-    row 29  Capex %            input
-    row 32  Net Cash           = NOI - capex
-    row 33  Cumulative Net Cash
-    row 35  ROI                = RATE(term, , NetCash_Y0, SUM(NetCash_Y0:Y6))
-    row 89  Contract Term      input, and it may be fractional
-    row 90  Run Rate           what a year bills in full; growth compounds here
-    row 91  Year Fraction      = MEDIAN(0, term - (n-1), 1)
+    row 13  COGS               = SUM of the eight category lines below
+    row 14-21  COGS by category = gross revenue * sales mix % * that
+                                 category's COGS rate (rows 70-77)
+    row 22  COGS % of net rev   = COGS / net revenue, shown for comparison
+    row 25  Payroll            Y1 = net revenue * %, then grown each year
+    row 26  Payroll % / growth  input: Y1 is a share, Y2..Y6 are growth rates
+    row 29  Expenses           = net revenue * expenses %
+    row 30  Expenses %         input, per year
+    row 32  NOI                = net revenue - COGS - payroll - expenses
+    row 33  NOI Margin         = NOI / net revenue
+    row 36  Capex Investment   Y0 = gross revenue Y0 * %, then revenue * %
+    row 37  Capex %            input
+    row 40  Net Cash           = NOI - capex
+    row 41  Cumulative Net Cash
+    row 43  ROI                = RATE(term, , NetCash_Y0, SUM(NetCash_Y0:Y6))
+    row 70  COGS Rates         input, one per income category
+    row 107 Contract Term      input, and it may be fractional
+    row 108 Run Rate           what a year bills in full; growth compounds here
+    row 109 Year Fraction      = MEDIAN(0, term - (n-1), 1)
 
 A term of 6.25 years runs six whole years and a three-month stub. The stub
 gets a column of its own and is prorated, not counted as a year: row 90
 carries the annualised run rate that growth compounds on, row 91 the share
 of each year that falls inside the term, and row 4 multiplies the two. Every
 line below row 4 keys off row 4, so they all prorate with it. The roster
-(rows 62+) bills months directly, so it reads row 91 into its month span,
+(rows 80+) bills months directly, so it reads row 91 into its month span,
 and the bonus write-off divides by the fractional term rather than a year
 count - which keeps it amortising to exactly the year-0 bonus.
 """
@@ -43,29 +46,33 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from roi_core import (CATEGORIES, DEFAULT_TERM, MAX_YEARS, STAFF_TYPES,
-                      as_years, role_cost, year_count)
+from roi_core import (CATEGORIES, COGS_CATEGORIES, DEFAULT_TERM, MAX_YEARS,
+                      STAFF_TYPES, as_years, cogs_rates_of, role_cost,
+                      year_count)
 
 # Column D holds Year 0; a sheet uses as many columns as its term needs.
 COL = [get_column_letter(4 + t) for t in range(MAX_YEARS + 1)]
 
 R = dict(title=2, year=3, rev=4, growth=5, comm=7, comm_pct=8, net=11,
-         cogs=13, cogs_pct=14, pay=17, pay_pct=18, exp=21, exp_pct=22,
-         amort=23, noi=24, margin=25, capex=28, capex_pct=29,
-         cash=32, cum=33,
-         roi=35, total=36, payback=37, avgmargin=38,
-         cat_head=40, rate0=41, mix_head=50, mix0=51,
-         staff_head=61, staff0=62, merit=77, incentive=78,
-         profit=79, pay0=84, exp0=85, exp0_pct=86, bonus=87,
-         invest=88,
-         term_row=89, rate=90, frac=91,
-         legend=94)
+         cogs=13, cogs0=14, cogs_pct=22, pay=25, pay_pct=26,
+         exp=29, exp_pct=30,
+         amort=31, noi=32, margin=33, capex=36, capex_pct=37,
+         cash=40, cum=41,
+         roi=43, total=44, payback=45, avgmargin=46,
+         cat_head=48, rate0=49, mix_head=58, mix0=59,
+         cogs_head=69, cogs_rate0=70,
+         staff_head=79, staff0=80, merit=95, incentive=96,
+         profit=97, pay0=102, exp0=103, exp0_pct=104, bonus=105,
+         invest=106,
+         term_row=107, rate=108, frac=109,
+         legend=112)
 
 MONEY = '_(* #,##0_);_(* (#,##0);_(* "-"??_);_(@_)'
 PCT = "0.00%"
 
 YELLOW = PatternFill("solid", start_color="FFFFFF00")
 GREEN = PatternFill("solid", start_color="FFC6EFCE")
+BLUE = PatternFill("solid", start_color="FFDEEBF7")   # the COGS block
 HEAD_FILL = PatternFill("solid", start_color="FFF2F5F8")
 
 INK = "FF1D2430"
@@ -117,7 +124,8 @@ def _sheet(wb, name, p, note=""):
     cols = COL[:n + 1]
     last = cols[-1]
     growth = as_years(p["rev_growth"], n)
-    cogs_pct = as_years(p["cogs"], n)
+    cogs_pct = as_years(p.get("cogs", 0.0), n)
+    cogs_rates = cogs_rates_of(p)
     exp_pct = as_years(p["expenses"], n)
     capex_pct = as_years(p["capex"], n)
     n_staff = len(STAFF_TYPES)
@@ -189,16 +197,47 @@ def _sheet(wb, name, p, note=""):
         ws[f"{c}{R['net']}"].border = TOP_RULE
     ws[f"C{R['net']}"].border = TOP_RULE
 
-    # ---- the three cost lines driven off net revenue ----
-    for key, pkey, name in (("cogs", "cogs", "COGS"),
-                            ("exp", "expenses", "Expenses")):
-        _label(ws, R[key], name)
-        _label(ws, R[f"{key}_pct"], f"{name} %", indent=1)
-        pcts = cogs_pct if key == "cogs" else exp_pct
+    # ---- COGS, costed category by category ----
+    # Each line is that category's own revenue - gross revenue times its
+    # share of sales - at its own rate, and COGS is the sum of them. The
+    # rates live in the input block further down, one per category.
+    _label(ws, R["cogs"], "COGS")
+    if cogs_rates:
+        first_line = R["cogs0"]
+        last_line = R["cogs0"] + len(COGS_CATEGORIES) - 1
+        for i, cat in enumerate(COGS_CATEGORIES):
+            row = R["cogs0"] + i
+            _label(ws, row, cat, indent=1).fill = BLUE
+            for t_i in range(1, n + 1):
+                c = cols[t_i]
+                _put(ws, row, c,
+                     f"={c}{R['rev']}*$D${R['mix0'] + i}"
+                     f"*$D${R['cogs_rate0'] + i}", fill=BLUE)
         for t_i in range(1, n + 1):
             c = cols[t_i]
-            _put(ws, R[key], c, f"={c}{R['net']}*{c}{R[f'{key}_pct']}")
-            _put(ws, R[f"{key}_pct"], c, pcts[t_i - 1] / 100.0, PCT, YELLOW)
+            _put(ws, R["cogs"], c, f"=SUM({c}{first_line}:{c}{last_line})")
+        # What the category rates come to against net revenue, so the sheet
+        # still says what COGS is costing in the terms the old one used.
+        _label(ws, R["cogs_pct"], "COGS % of net revenue", indent=1)
+        for t_i in range(1, n + 1):
+            c = cols[t_i]
+            _put(ws, R["cogs_pct"], c, f"={c}{R['cogs']}/{c}{R['net']}", PCT,
+                 colour=MUTED)
+    else:
+        # No category rates: one input rate per year, against net revenue.
+        _label(ws, R["cogs_pct"], "COGS %", indent=1)
+        for t_i in range(1, n + 1):
+            c = cols[t_i]
+            _put(ws, R["cogs"], c, f"={c}{R['net']}*{c}{R['cogs_pct']}")
+            _put(ws, R["cogs_pct"], c, cogs_pct[t_i - 1] / 100.0, PCT, YELLOW)
+
+    # ---- expenses, a flat share of net revenue ----
+    _label(ws, R["exp"], "Expenses")
+    _label(ws, R["exp_pct"], "Expenses %", indent=1)
+    for t_i in range(1, n + 1):
+        c = cols[t_i]
+        _put(ws, R["exp"], c, f"={c}{R['net']}*{c}{R['exp_pct']}")
+        _put(ws, R["exp_pct"], c, exp_pct[t_i - 1] / 100.0, PCT, YELLOW)
 
     # ---- payroll: a share of year-1 net revenue, then grown ----
     _label(ws, R["pay"], "Payroll")
@@ -309,6 +348,14 @@ def _sheet(wb, name, p, note=""):
     _put(ws, R["mix0"] + len(CATEGORIES), "D",
          f"=SUM({mix_span})", PCT, bold=True)
 
+    # ---- what each category costs to deliver, as a share of its own income ----
+    if cogs_rates:
+        _label(ws, R["cogs_head"], "COGS Rates By Category", bold=True)
+        for i, cat in enumerate(COGS_CATEGORIES):
+            _label(ws, R["cogs_rate0"] + i, cat, indent=1)
+            _put(ws, R["cogs_rate0"] + i, "D", cogs_rates[i] / 100.0, PCT,
+                 YELLOW)
+
     # Revenue-weighted: total NOI over total net revenue across the term,
     # spanning the operating years only.
     noi_span = f"{cols[1]}{R['noi']}:{last}{R['noi']}"
@@ -410,9 +457,11 @@ def _sheet(wb, name, p, note=""):
         _put(ws, R["frac"], cols[t_i],
              f"=MEDIAN(0,$D${R['term_row']}-{t_i - 1},1)", PCT, colour=MUTED)
 
-    note = ws.cell(row=R["legend"], column=3,
-                   value="Yellow cells are inputs - change any of them and "
-                         "every figure above, ROI included, recalculates.")
+    legend = ("Yellow cells are inputs - change any of them and every "
+              "figure above, ROI included, recalculates.")
+    if cogs_rates:
+        legend += " The blue block is COGS broken out by income category."
+    note = ws.cell(row=R["legend"], column=3, value=legend)
     note.font = Font(name="Calibri", size=9, italic=True, color=MUTED)
     ws.freeze_panes = f"D{R['year'] + 1}"
     return ws
