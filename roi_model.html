@@ -1,0 +1,1917 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotel ROI Modeling Tool</title>
+<!--
+  Hotel ROI Modeling Tool - browser edition of roi_model.py.
+
+  One self-contained file: no server, no installs, no internet access needed.
+  The model (a port of roi_core.py) and the Excel export (a port of
+  roi_export.py, with its own tiny .xlsx writer) live in the "core" script
+  below; the page itself lives in the "ui" script after it.
+
+  Setup files are interchangeable with the desktop app's Save/Load Setup.
+-->
+<style>
+:root {
+  --page:    #eef1f5;
+  --card:    #ffffff;
+  --hero:    #101828;
+  --hero-2:  #1d2939;
+  --ink:     #0f172a;
+  --ink-2:   #334155;
+  --muted:   #8794a7;
+  --muted-2: #64748b;
+  --hair:    #e8ecf1;
+  --accent:  #059669;
+  --accent-2:#10b981;
+  --accent-hi:#34d399;
+  --accent-bg:#ecfdf5;
+  --neg:     #e11d48;
+  --neg-2:   #f43f5e;
+  --track:   #e6eaf0;
+  --sub:     #f8fafc;
+  --field:   #f1f4f8;
+  --field-2: #e9eef4;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+               "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1720px; margin: 0 auto; padding: 18px 22px 30px; }
+
+/* ------------------------------------------------------------- header --- */
+.head { display: flex; align-items: flex-start; gap: 14px 24px; flex-wrap: wrap;
+        margin-bottom: 16px; }
+.head .title { flex: 1 1 360px; min-width: 0; }
+.title-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.head h1 { margin: 0; font-size: 26px; font-weight: 350; letter-spacing: -0.2px;
+           color: var(--ink); white-space: nowrap; }
+.note {
+  flex: 1 1 200px; min-width: 0; max-width: 460px;
+  font: inherit; font-size: 16px; color: var(--ink-2);
+  background: transparent; border: 0; border-bottom: 1px solid var(--hair);
+  padding: 3px 0; outline: none;
+}
+.note::placeholder { color: var(--muted); }
+.note:focus { border-bottom-color: var(--accent); }
+.head .sub { margin: 4px 0 0; font-size: 13px; color: var(--muted-2); }
+
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scenarios { display: flex; gap: 6px; }
+
+.btn {
+  appearance: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600;
+  padding: 9px 16px; border-radius: 9px;
+  background: var(--card); color: var(--ink-2);
+  box-shadow: 0 1px 2px rgba(16,24,40,.10), 0 1px 1px rgba(16,24,40,.04);
+  transition: background .12s ease;
+}
+.btn:hover { background: #f5f7fa; }
+.btn:focus-visible, .scen:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary:hover { background: #047857; }
+
+.scen {
+  appearance: none; border: 0; cursor: pointer; font: inherit;
+  width: 100px; padding: 5px 0 6px; border-radius: 9px;
+  background: var(--card); text-align: center; line-height: 1.15;
+  box-shadow: 0 1px 2px rgba(16,24,40,.10), 0 1px 1px rgba(16,24,40,.04);
+  transition: background .12s ease;
+}
+.scen:hover { background: #f5f7fa; }
+.scen .name { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px;
+              text-transform: uppercase; color: var(--muted); }
+.scen .val { display: block; font-size: 17px; font-weight: 600; color: var(--ink-2);
+             font-variant-numeric: tabular-nums; }
+.scen.active { background: var(--accent); }
+.scen.active .name { color: #a7f3d0; }
+.scen.active .val { color: #fff; }
+
+/* -------------------------------------------------------------- layout -- */
+.grid { display: grid; grid-template-columns: 432px minmax(0, 1fr); gap: 16px;
+        align-items: start; }
+.card {
+  background: var(--card); border-radius: 14px; padding: 18px 22px;
+  box-shadow: 0 1px 3px rgba(16,24,40,.09), 0 6px 16px -6px rgba(16,24,40,.10);
+}
+.params { position: sticky; top: 12px; max-height: calc(100vh - 24px);
+          overflow-y: auto; padding: 4px 24px 20px; scrollbar-width: thin;
+          scrollbar-color: #dbe2ea transparent; }
+.results { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .params { position: static; max-height: none; }
+}
+@media (max-width: 520px) {
+  .wrap { padding: 14px 16px 24px; }
+  .head h1 { font-size: 22px; white-space: normal; }
+  .params { padding: 4px 16px 16px; }
+  .card { padding: 16px; }
+}
+
+/* ---------------------------------------------------------------- hero -- */
+.hero {
+  background: var(--hero); border-radius: 14px; padding: 24px 28px;
+  display: flex; align-items: center; gap: 18px 26px; flex-wrap: wrap;
+  box-shadow: 0 1px 3px rgba(16,24,40,.16), 0 10px 24px -8px rgba(16,24,40,.28);
+}
+.hero .lede { flex: 1 1 260px; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+           text-transform: uppercase; color: var(--accent-hi); margin: 0; }
+.roi { font-size: 60px; font-weight: 300; line-height: 1.02; margin: 6px 0 4px;
+       color: var(--accent-hi); letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
+.roi.neg { color: #fb7185; }
+.hero .hnote { margin: 0; font-size: 12.5px; color: #7c8aa0; }
+.stats { display: flex; flex-wrap: wrap; row-gap: 14px; }
+.stat { padding: 0 20px; border-left: 1px solid var(--hero-2); }
+.stat:first-child { border-left: 0; padding-left: 0; }
+.stat .k { font-size: 10px; font-weight: 700; letter-spacing: 1.3px;
+           text-transform: uppercase; color: #69788e; margin: 0 0 6px; }
+.stat .v { font-size: 21px; font-weight: 350; color: #e9eef5; margin: 0;
+           font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat .v.neg { color: #fb7185; }
+@media (max-width: 520px) {
+  .roi { font-size: 46px; }
+  .stat { padding: 0 14px; }
+}
+
+/* ----------------------------------------------------------- controls --- */
+.section { padding-top: 19px; }
+.section + .section { border-top: 1px solid var(--hair); margin-top: 21px; }
+.section h2 { font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+              text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+
+.ctl + .ctl, .group + .ctl, .ctl + .group, .group + .group { margin-top: 18px; }
+.ctl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ctl-head label, .kv .k { font-size: 13.5px; color: var(--ink-2); }
+.kv { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.kv .v { font-size: 15px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tick { font-size: 11px; color: var(--muted); margin: 3px 0 0; }
+.tick.warn { color: var(--neg); }
+
+.field {
+  width: 84px; height: 27px; border: 0; border-radius: 7px; background: var(--field);
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; text-align: right; padding: 0 9px; outline: none;
+}
+.field.wide { width: 130px; }
+.field.text { width: auto; flex: 1 1 auto; min-width: 0; text-align: left; font-weight: 400; }
+.field.narrow { width: 52px; }
+.field:focus { box-shadow: 0 0 0 2px rgba(5,150,105,.35); }
+.inset .field { background: var(--field-2); }
+
+.ends { display: flex; justify-content: space-between; gap: 8px; font-size: 11px;
+        color: var(--muted); margin-top: 1px; }
+
+input[type=range] {
+  -webkit-appearance: none; appearance: none; display: block;
+  width: 100%; height: 24px; margin: 6px 0 0; background: transparent; cursor: pointer;
+  --f: 0;
+}
+input[type=range]:focus { outline: none; }
+input[type=range]::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) calc(8px + (100% - 16px) * var(--f)),
+                                        var(--track) 0);
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%;
+  background: #fff; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(16,24,40,.30);
+  transition: box-shadow .12s ease, border-color .12s ease;
+}
+input[type=range]:hover::-webkit-slider-thumb,
+input[type=range]:focus-visible::-webkit-slider-thumb,
+input[type=range]:active::-webkit-slider-thumb {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 6px rgba(5,150,105,.16), 0 1px 3px rgba(16,24,40,.30);
+}
+input[type=range]::-moz-range-track { height: 5px; border-radius: 3px; background: var(--track); }
+input[type=range]::-moz-range-progress { height: 5px; border-radius: 3px; background: var(--accent); }
+input[type=range]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(16,24,40,.30);
+}
+
+.inset { background: var(--sub); border-radius: 10px; padding: 12px 14px 14px; margin-top: 10px; }
+.inset .ctl + .ctl { margin-top: 12px; }
+.sub-head { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+            color: var(--muted); margin: 0 0 8px; }
+.group > .inset:first-child { margin-top: 0; }
+
+.toggle { display: inline-flex; align-items: center; gap: 7px; margin-top: 8px;
+          font-size: 12px; color: var(--accent); cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--accent); width: 13px; height: 13px; margin: 0; cursor: pointer; }
+
+.role + .role { border-top: 1px solid #e4e9f0; margin-top: 10px; padding-top: 10px; }
+.role .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.role .top span { font-size: 11px; color: var(--muted); }
+
+/* --------------------------------------------------------------- table -- */
+.tbl-wrap { overflow-x: auto; }
+table.model { border-collapse: collapse; width: 100%; min-width: 640px;
+              font-variant-numeric: tabular-nums; }
+table.model th { font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+                 color: var(--muted); text-align: right; padding: 0 8px 10px; white-space: nowrap; }
+table.model th:first-child { text-align: left; }
+table.model td { font-size: 13.5px; color: var(--ink-2); text-align: right; padding: 6px 8px;
+                 white-space: nowrap; }
+table.model td:first-child { text-align: left; }
+table.model tr.r-head td { font-weight: 600; color: var(--ink); }
+table.model tr.r-soft td { color: var(--muted); }
+table.model tr.r-cash td { font-weight: 600; color: var(--ink); background: var(--accent-bg); }
+table.model tr.r-cash td:first-child { border-radius: 7px 0 0 7px; }
+table.model tr.r-cash td:last-child { border-radius: 0 7px 7px 0; }
+
+/* --------------------------------------------------------------- chart -- */
+.chart-title { font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
+               text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: 190px; overflow: visible; }
+.chart text { font-family: inherit; font-variant-numeric: tabular-nums; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .slot-hover { fill: #f3f6f9; }
+.tip {
+  position: absolute; pointer-events: none; z-index: 5; white-space: nowrap;
+  background: var(--hero); color: #e9eef5; font-size: 12px; line-height: 1.45;
+  padding: 7px 10px; border-radius: 8px; box-shadow: 0 6px 18px rgba(16,24,40,.25);
+  transform: translate(-50%, calc(-100% - 10px));
+}
+.tip b { font-weight: 600; }
+.tip .m { color: #9aa8bb; }
+
+/* --------------------------------------------------------------- toast -- */
+.toast {
+  position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%); z-index: 20; max-width: min(560px, calc(100vw - 32px));
+  background: var(--hero); color: #e9eef5; padding: 12px 16px; border-radius: 10px;
+  font-size: 13px; line-height: 1.45; box-shadow: 0 10px 30px rgba(16,24,40,.3);
+}
+.toast.err { background: #7f1d1d; }
+
+@media print {
+  body { background: #fff; }
+  .actions, .params { display: none; }
+  .grid { grid-template-columns: 1fr; }
+  .card, .hero { box-shadow: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="head">
+    <div class="title">
+      <div class="title-row">
+        <h1>Hotel ROI Modeling Tool</h1>
+        <input id="note" class="note" maxlength="100" placeholder="Click to add a note"
+               aria-label="Note" autocomplete="off">
+      </div>
+      <p class="sub">Contract cash-flow model &nbsp;·&nbsp; App Model.xlsx</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btn-reset" title="Put the controls back to the workbook's opening numbers">Reset</button>
+      <button class="btn" id="btn-across" title="Copy what is on screen into all three scenarios">Save Across</button>
+      <div class="scenarios" id="scenarios"></div>
+      <button class="btn" id="btn-save" title="Download every scenario as a setup file">Save Setup</button>
+      <button class="btn" id="btn-load" title="Open a setup file written by Save Setup">Load Setup</button>
+      <button class="btn primary" id="btn-export" title="Download a live Excel workbook">Export XLSX</button>
+      <input type="file" id="setup-file" accept=".json,application/json" hidden>
+    </div>
+  </header>
+
+  <main class="grid">
+    <aside class="card params" id="params" aria-label="Model inputs"></aside>
+
+    <section class="results">
+      <div class="hero">
+        <div class="lede">
+          <p class="eyebrow">Return on Investment</p>
+          <p class="roi" id="roi">-</p>
+          <p class="hnote" id="hero-note">annualized on the year-0 capex</p>
+        </div>
+        <div class="stats">
+          <div class="stat"><p class="k">Initial Investment</p><p class="v" id="stat-invest">-</p></div>
+          <div class="stat"><p class="k">Total Net Cash</p><p class="v" id="stat-total">-</p></div>
+          <div class="stat"><p class="k">Payback</p><p class="v" id="stat-payback">-</p></div>
+          <div class="stat"><p class="k">Avg NOI Margin</p><p class="v" id="stat-margin">-</p></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="tbl-wrap"><table class="model" id="model"></table></div>
+      </div>
+
+      <div class="card">
+        <p class="chart-title">Net cash by year</p>
+        <div class="chart" id="chart"></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script id="core">
+/* @core-begin
+   The financial model from "App Model.xlsx" (a line-for-line port of
+   roi_core.py) and the live-formula Excel export (a port of roi_export.py).
+   Nothing in here touches the page, so it can be tested on its own. */
+"use strict";
+
+const MAX_YEARS = 10;     // the longest contract term the app offers
+const DEFAULT_TERM = 6;   // what the workbook itself models
+const TERM_STEP = 0.25;   // terms are set in quarter-year steps
+
+function clampTerm(term) {
+  return Math.max(TERM_STEP, Math.min(MAX_YEARS, Number(term)));
+}
+
+/* How many operating-year columns a term needs. A fractional term still gets
+   a whole column for its stub: 6.25 runs six years and a 3-month tail. */
+function yearCount(term) {
+  term = clampTerm(term);
+  let n = Math.floor(term);
+  if (term - n > 1e-9) n += 1;
+  return Math.max(1, n);
+}
+
+/* Each operating year's share of a full year; the weights sum back to term. */
+function termWeights(term) {
+  term = clampTerm(term);
+  const n = yearCount(term);
+  const w = new Array(n).fill(1);
+  const tail = term - (n - 1);
+  if (tail < 1) w[n - 1] = Math.round(tail * 1e9) / 1e9;
+  return w;
+}
+
+const CATEGORIES = [
+  "Labor Income", "Equipment Income", "Logistics Income",
+  "Consumable / Sale Item Income", "Creative Content Income",
+  "Rigging Income", "Power Income", "HSIA Income",
+];
+
+// type, title, start month, salary, benefit load %
+const STAFF = [
+  ["Salaried Full Time Staff", "Director", -1, 78000, 13.3],
+  ["Salaried Full Time Staff", "Technical Coordinator 1", -1, 55000, 13.3],
+  ["Salaried Full Time Staff", "Technical Coordinator 2", -1, 0, 13.3],
+  ["Salaried Full Time Staff", "Technical Coordinator 3", -1, 0, 13.3],
+  ["Salaried Full Time Staff", "Technical Coordinator 4", -1, 0, 13.3],
+  ["Hourly Full Time Staff", "Technician 1", -1, 45670, 13.3],
+  ["Hourly Full Time Staff", "Technician 2", -1, 0, 13.3],
+  ["Hourly Full Time Staff", "Technician 3", -1, 0, 13.3],
+  ["Hourly Full Time Staff", "Technician 4", -1, 0, 13.3],
+  ["Hourly Full Time Staff", "Technician 5", -1, 0, 13.3],
+  ["Hourly /Part Time / Seasonal Positions", "Technician 6", -1, 22880, 8.85],
+  ["Hourly /Part Time / Seasonal Positions", "Technician 7", -1, 0, 8.85],
+  ["Hourly /Part Time / Seasonal Positions", "Technician 8", -1, 0, 8.85],
+  ["Hourly /Part Time / Seasonal Positions", "Technician 9", -1, 0, 8.85],
+];
+const STAFF_TYPES = STAFF.map(s => s[0]);
+
+/* Year-1 payroll before merit: every salary grossed up by its benefits. */
+function staffBase(salaries, loads) {
+  let total = 0;
+  for (let i = 0; i < salaries.length; i++) total += salaries[i] * (1 + loads[i] / 100);
+  return total;
+}
+
+/* One role's cost in operating year n, following the workbook's "Payroll
+   Calculation" tab: service months decide the merit step, a year can straddle
+   two steps, and a stub year bills only its own months. */
+function roleCost(loaded, merit, startMonth, n, weight = 1) {
+  const start = Math.max(0, 12 * (n - 1) - startMonth);
+  let end = Math.max(0, 12 * n - startMonth);
+  if (weight < 1) end = Math.max(0, Math.min(end, 12 * (n - 1) + weight * 12 - startMonth));
+  if (end - start <= 0) return 0;
+  const k = Math.floor(start / 12);
+  const cap = 12 * (k + 1);
+  const atK = Math.min(end, cap) - start;
+  const atK1 = end - Math.min(end, cap);
+  const m = merit / 100;
+  return loaded * (Math.pow(1 + m, k) * atK + Math.pow(1 + m, k + 1) * atK1) / 12;
+}
+
+const filled = (v, count) => new Array(count).fill(v);
+
+// Opening values, mirroring the yellow input cells of App Model.xlsx.
+const DEFAULTS = {
+  term: DEFAULT_TERM,
+  gross_revenue: 967000,
+  rev_growth: [0].concat(filled(3, MAX_YEARS - 1)),
+  commission_rates: [49, 49, 49, 49, 30, 30, 75, 75],
+  sales_mix: [40.03, 56.11, 1.96, 0, 0.14, 0.02, 0, 1.74],
+  cogs: 10,
+  expenses: 6.5,
+  staff_titles: STAFF.map(s => s[1]),
+  staff_starts: STAFF.map(s => s[2]),
+  staff_salaries: STAFF.map(s => s[3]),
+  staff_loads: STAFF.map(s => s[4]),
+  merit: 3,
+  incentive_pct: 1.6,
+  profit_share_pct: 0.89,
+  capex_initial: 25.15,
+  capex: [0].concat(filled(3.15, MAX_YEARS - 1)),
+  year0_expense_pct: 0.7172547150951487,
+  signing_bonus: [60000].concat(filled(0, MAX_YEARS)),
+};
+
+/* A per-year list of exactly `count` entries, padded with its last value. */
+function asYears(def, count) {
+  if (!Array.isArray(def)) return filled(def, count);
+  if (def.length >= count) return def.slice(0, count);
+  return def.concat(filled(def.length ? def[def.length - 1] : 0, count - def.length));
+}
+
+function isUniform(values) {
+  return values.every(v => v === values[0]);
+}
+
+/* What a per-year series collapses to on its lead slider: the most common entry. */
+function leadValue(values) {
+  let best = values[0], bestCount = 0;
+  for (const v of values) {
+    const c = values.filter(x => x === v).length;
+    if (c > bestCount) { best = v; bestCount = c; }
+  }
+  return best;
+}
+
+/* The workbook's SUMPRODUCT of contract rates against the sales mix. */
+function blendedCommission(rates, mix) {
+  let total = 0;
+  for (let i = 0; i < Math.min(rates.length, mix.length); i++) total += rates[i] * mix[i];
+  return total / 100;
+}
+
+// Line items as they appear in the workbook: label, series key, format.
+const ROWS = [
+  ["Gross Revenue", "rev", "money"],
+  ["Revenue Growth", "_growth", "pct"],
+  ["Commission", "commission", "money"],
+  ["Net Revenue", "net_rev", "money"],
+  ["COGS", "cogs", "money"],
+  ["Payroll", "payroll", "money"],
+  ["Payroll % of Net Revenue", "payroll_pct", "pct"],
+  ["Expenses", "expenses", "money"],
+  ["Bonus Amortization", "amort", "money"],
+  ["NOI", "noi", "money"],
+  ["NOI Margin", "margin", "pct"],
+  ["Capex Investment", "capex", "money"],
+  ["Initial Investment", "invest", "money"],
+  ["Net Cash", "net_cash", "money"],
+  ["Cumulative Net Cash", "cumulative", "money"],
+];
+const YEAR0 = new Set(["rev", "capex", "invest", "net_cash", "cumulative"]);
+const ONLY_YEAR0 = new Set(["invest"]);
+
+/* Run the model. Percentages arrive in display units (3 means 3%). */
+function compute(p) {
+  const term = clampTerm(p.term ?? DEFAULT_TERM);
+  const n = yearCount(term);
+  const weight = termWeights(term);
+
+  const growth = asYears(p.rev_growth, n);
+  const cogsPct = asYears(p.cogs ?? 0, n);
+  const expPct = asYears(p.expenses, n);
+  const capexPct = asYears(p.capex, n);
+  const commPct = blendedCommission(p.commission_rates, p.sales_mix);
+  const merit = p.merit ?? 0;
+  const incentive = p.incentive_pct ?? 0;
+  const profitShare = p.profit_share_pct ?? 0;
+  const loaded = p.staff_salaries.map((s, i) => s * (1 + p.staff_loads[i] / 100));
+  const starts = p.staff_starts || loaded.map(() => 0);
+  const base = staffBase(p.staff_salaries, p.staff_loads);
+
+  const z = () => filled(0, n + 1);
+  const rev = z(), comm = z(), netRev = z(), cogs = z(), payroll = z(),
+        expenses = z(), noi = z(), capex = z(), rate = z();
+
+  // `rate` is what a year would bill in full; `rev` is what the contract
+  // books, which is less in a stub year. Growth compounds on the run rate.
+  rate[0] = p.gross_revenue;
+  rev[0] = rate[0];
+  for (let t = 1; t <= n; t++) {
+    rate[t] = rate[t - 1] * (1 + growth[t - 1] / 100);
+    rev[t] = rate[t] * weight[t - 1];
+    comm[t] = rev[t] * commPct / 100;
+    netRev[t] = rev[t] - comm[t];
+    cogs[t] = netRev[t] * cogsPct[t - 1] / 100;
+    expenses[t] = netRev[t] * expPct[t - 1] / 100;
+  }
+
+  // Roster escalated by merit, plus the revenue-linked overlays.
+  for (let t = 1; t <= n; t++) {
+    let staff = 0;
+    for (let i = 0; i < loaded.length; i++) staff += roleCost(loaded[i], merit, starts[i], t, weight[t - 1]);
+    payroll[t] = staff + rev[t] * incentive / 100 + netRev[t] * profitShare / 100;
+  }
+
+  // The year-0 signing bonus is written off over the term, with each year's
+  // own bonus. It lowers NOI but is not cash, so Net Cash adds it back.
+  const raw = p.signing_bonus ?? 0;
+  let bonus = Array.isArray(raw)
+    ? raw.concat(filled(0, n + 1)).slice(0, n + 1)
+    : [Number(raw)].concat(filled(0, n));
+  bonus = [bonus[0]].concat(bonus.slice(1).map((b, i) => b * weight[i]));
+  const amort = z();
+  for (let t = 1; t <= n; t++) amort[t] = bonus[0] / term * weight[t - 1] + bonus[t];
+
+  for (let t = 1; t <= n; t++) {
+    noi[t] = netRev[t] - cogs[t] - payroll[t] - expenses[t] - amort[t];
+  }
+
+  // The year-0 outlay keys off a full year of year-1 billing (=+E4*D72).
+  capex[0] = rate[1] * p.capex_initial / 100;
+  for (let t = 1; t <= n; t++) capex[t] = rev[t] * capexPct[t - 1] / 100;
+
+  let pay0 = 0;
+  for (let i = 0; i < loaded.length; i++) pay0 += roleCost(loaded[i], merit, starts[i], 0);
+  const exp0 = rate[1] * (p.year0_expense_pct ?? 0) / 100;
+
+  const invest = capex.map((c, t) => c + bonus[t]);
+  invest[0] += pay0 + exp0;
+
+  const netCash = [noi[0] - invest[0]];
+  for (let t = 1; t <= n; t++) netCash.push(noi[t] - capex[t] - bonus[t] + amort[t]);
+
+  const cumulative = [];
+  let run = 0;
+  for (const v of netCash) { run += v; cumulative.push(run); }
+
+  const total = cumulative[cumulative.length - 1];
+  const pv = netCash[0];
+
+  // RATE(term, , pv, total) with no payment has a closed form.
+  let roi = null;
+  if (pv !== 0) {
+    const ratio = -total / pv;
+    if (ratio > 0) roi = Math.pow(ratio, 1 / term) - 1;
+  }
+
+  // Payback, interpolated across the year it turns positive (scaled by a stub's weight).
+  let payback = null;
+  for (let t = 1; t <= n; t++) {
+    if (cumulative[t] >= 0) {
+      const prev = cumulative[t - 1];
+      const step = cumulative[t] - prev;
+      const into = step ? -prev / step : 0;
+      payback = (t - 1) + weight[t - 1] * into;
+      break;
+    }
+  }
+
+  const margin = noi.map((v, t) => netRev[t] ? v / netRev[t] : 0);
+  const payrollPct = payroll.map((v, t) => netRev[t] ? v / netRev[t] : 0);
+  let noiSum = 0, netSum = 0;
+  for (let t = 1; t <= n; t++) { noiSum += noi[t]; netSum += netRev[t]; }
+  const avgMargin = netSum ? noiSum / netSum : 0;
+
+  return {
+    term, years: n, weights: weight, rate,
+    commission_pct: commPct, staff_base: base,
+    invest, amort,
+    year0_payroll: pay0, year0_expense: exp0, year0_bonus: bonus[0],
+    margin, avg_margin: avgMargin, payroll_pct: payrollPct,
+    rev, commission: comm, net_rev: netRev, cogs, payroll, expenses, noi, capex,
+    net_cash: netCash, cumulative,
+    _growth: [0].concat(growth.map(g => g / 100)),
+    total, roi, payback,
+  };
+}
+
+/* ------------------------------------------------------------- formats -- */
+function money(v) {
+  const s = Math.round(Math.abs(v)).toLocaleString("en-US");
+  return v < 0 ? `(${s})` : s;
+}
+function pct(v, dp = 1) {
+  return (v * 100).toFixed(dp) + "%";
+}
+/* Python's "{:g}": up to six significant digits, no trailing zeros. */
+function fmtG(v) {
+  return String(parseFloat(Number(v).toPrecision(6)));
+}
+
+/* ================================================================ XLSX === */
+/* Every derived cell is a formula, not a number, so the exported file is a
+   working model: change a yellow input and Excel recalculates the sheet. */
+const Xlsx = (() => {
+  const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    // XML 1.0 has no representation for most control characters.
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
+
+  function colLetter(n) {
+    let s = "";
+    while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  }
+  function colNumber(letters) {
+    let n = 0;
+    for (const ch of letters) n = n * 26 + ch.charCodeAt(0) - 64;
+    return n;
+  }
+
+  class Sheet {
+    constructor(name) { this.name = name; this.cells = new Map(); this.widths = new Map(); this.freeze = null; }
+    cell(ref) {
+      let c = this.cells.get(ref);
+      if (!c) { c = { ref, font: null, fill: null, numFmt: "General", align: null, border: null }; this.cells.set(ref, c); }
+      return c;
+    }
+    width(col, w) { this.widths.set(col, w); }
+  }
+
+  // Built-in number formats Excel knows by id; anything else is registered.
+  const BUILTIN_FMT = { "General": 0, "0": 1, "0.00": 2, "0%": 9, "0.00%": 10 };
+
+  function build(sheets) {
+    const fonts = ['<font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>'];
+    const fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
+    const borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
+    const numFmts = [];
+    const xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
+    const idx = { font: new Map(), fill: new Map(), border: new Map(), fmt: new Map(), xf: new Map() };
+    const intern = (map, list, key, xml) => {
+      if (!map.has(key)) { map.set(key, list.length); list.push(xml); }
+      return map.get(key);
+    };
+
+    function styleId(c) {
+      if (!c.font && !c.fill && !c.border && !c.align && c.numFmt === "General") return 0;
+      let fontId = 0, fillId = 0, borderId = 0, fmtId = 0;
+      if (c.font) {
+        const f = c.font;
+        const xml = "<font>" + (f.b ? "<b/>" : "") + (f.i ? "<i/>" : "") +
+          `<sz val="${f.sz}"/><color rgb="${f.color}"/><name val="Calibri"/><family val="2"/></font>`;
+        fontId = intern(idx.font, fonts, xml, xml);
+      }
+      if (c.fill) {
+        const xml = `<fill><patternFill patternType="solid"><fgColor rgb="${c.fill}"/><bgColor indexed="64"/></patternFill></fill>`;
+        fillId = intern(idx.fill, fills, xml, xml);
+      }
+      if (c.border) {
+        const side = s => c.border[s] ? `<${s} style="thin"><color rgb="${c.border[s]}"/></${s}>` : `<${s}/>`;
+        const xml = "<border>" + ["left", "right", "top", "bottom"].map(side).join("") + "<diagonal/></border>";
+        borderId = intern(idx.border, borders, xml, xml);
+      }
+      if (c.numFmt in BUILTIN_FMT) {
+        fmtId = BUILTIN_FMT[c.numFmt];
+      } else {
+        fmtId = 164 + intern(idx.fmt, numFmts, c.numFmt,
+          `<numFmt numFmtId="${164 + numFmts.length}" formatCode="${esc(c.numFmt)}"/>`);
+      }
+      const align = c.align
+        ? `<alignment horizontal="${c.align.h}"${c.align.indent ? ` indent="${c.align.indent}"` : ""}/>`
+        : "";
+      const xml = `<xf numFmtId="${fmtId}" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" xfId="0"` +
+        ' applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"' +
+        (align ? ` applyAlignment="1">${align}</xf>` : "/>");
+      return intern(idx.xf, xfs, xml, xml);
+    }
+
+    const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+               'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+
+    const sheetXml = sheets.map((ws, si) => {
+      const rows = new Map();
+      for (const c of ws.cells.values()) {
+        const m = /^([A-Z]+)(\d+)$/.exec(c.ref);
+        const r = Number(m[2]);
+        if (!rows.has(r)) rows.set(r, []);
+        rows.get(r).push([colNumber(m[1]), c]);
+      }
+      let data = "";
+      for (const r of [...rows.keys()].sort((a, b) => a - b)) {
+        data += `<row r="${r}">`;
+        for (const [, c] of rows.get(r).sort((a, b) => a[0] - b[0])) {
+          const s = styleId(c);
+          const sAttr = s ? ` s="${s}"` : "";
+          if (c.formula != null) {
+            data += `<c r="${c.ref}"${sAttr}><f>${esc(c.formula)}</f></c>`;
+          } else if (typeof c.value === "number" && isFinite(c.value)) {
+            data += `<c r="${c.ref}"${sAttr}><v>${c.value}</v></c>`;
+          } else if (c.value != null && c.value !== "") {
+            data += `<c r="${c.ref}"${sAttr} t="inlineStr"><is><t xml:space="preserve">${esc(c.value)}</t></is></c>`;
+          } else {
+            data += `<c r="${c.ref}"${sAttr}/>`;
+          }
+        }
+        data += "</row>";
+      }
+      let pane = "";
+      if (ws.freeze) {
+        const m = /^([A-Z]+)(\d+)$/.exec(ws.freeze);
+        const x = colNumber(m[1]) - 1, y = Number(m[2]) - 1;
+        pane = `<pane xSplit="${x}" ySplit="${y}" topLeftCell="${ws.freeze}" activePane="bottomRight" state="frozen"/>` +
+               `<selection pane="topRight"/><selection pane="bottomLeft"/>` +
+               `<selection pane="bottomRight" activeCell="${ws.freeze}" sqref="${ws.freeze}"/>`;
+      }
+      const cols = [...ws.widths.entries()]
+        .map(([col, w]) => [colNumber(col), w]).sort((a, b) => a[0] - b[0])
+        .map(([n, w]) => `<col min="${n}" max="${n}" width="${w}" customWidth="1"/>`).join("");
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+        `<worksheet ${NS}><sheetViews><sheetView showGridLines="0"${si === 0 ? ' tabSelected="1"' : ""} workbookViewId="0">` +
+        `${pane}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>` +
+        (cols ? `<cols>${cols}</cols>` : "") + `<sheetData>${data}</sheetData>` +
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
+    });
+
+    const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      (numFmts.length ? `<numFmts count="${numFmts.length}">${numFmts.join("")}</numFmts>` : "") +
+      `<fonts count="${fonts.length}">${fonts.join("")}</fonts>` +
+      `<fills count="${fills.length}">${fills.join("")}</fills>` +
+      `<borders count="${borders.length}">${borders.join("")}</borders>` +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      `<cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs>` +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+      "</styleSheet>";
+
+    const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      `<workbook ${NS}><bookViews><workbookView activeTab="0"/></bookViews><sheets>` +
+      sheets.map((ws, i) => `<sheet name="${esc(ws.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("") +
+      // No cached values are written, so Excel must calculate on open.
+      '</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>';
+
+    const wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("") +
+      `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+      "</Relationships>";
+
+    const rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      "</Relationships>";
+
+    const types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("") +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      "</Types>";
+
+    return zip([
+      ["[Content_Types].xml", types],
+      ["_rels/.rels", rootRels],
+      ["xl/workbook.xml", workbook],
+      ["xl/_rels/workbook.xml.rels", wbRels],
+      ["xl/styles.xml", styles],
+      ...sheetXml.map((x, i) => [`xl/worksheets/sheet${i + 1}.xml`, x]),
+    ]);
+  }
+
+  /* ---- a minimal zip (stored, uncompressed), which is all .xlsx needs ---- */
+  const CRC = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zip(entries) {
+    const enc = new TextEncoder();
+    const parts = [], central = [];
+    let offset = 0;
+    for (const [path, text] of entries) {
+      const name = enc.encode(path), data = enc.encode(text), crc = crc32(data);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+      h.setUint16(8, 0, true); h.setUint16(10, 0, true); h.setUint16(12, 0x21, true);
+      h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true);
+      h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+      parts.push(new Uint8Array(h.buffer), name, data);
+
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true);
+      c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true); c.setUint16(12, 0, true);
+      c.setUint16(14, 0x21, true); c.setUint32(16, crc, true); c.setUint32(20, data.length, true);
+      c.setUint32(24, data.length, true); c.setUint16(28, name.length, true);
+      c.setUint32(42, offset, true);
+      central.push(new Uint8Array(c.buffer), name);
+      offset += 30 + name.length + data.length;
+    }
+    const cdSize = central.reduce((a, b) => a + b.length, 0);
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, entries.length, true);
+    e.setUint16(10, entries.length, true); e.setUint32(12, cdSize, true); e.setUint32(16, offset, true);
+    const all = [...parts, ...central, new Uint8Array(e.buffer)];
+    const out = new Uint8Array(all.reduce((a, b) => a + b.length, 0));
+    let at = 0;
+    for (const a of all) { out.set(a, at); at += a.length; }
+    return out;
+  }
+
+  return { Sheet, build, colLetter };
+})();
+
+/* ---- the workbook layout: a port of roi_export.py ---- */
+const XL_COL = Array.from({ length: MAX_YEARS + 1 }, (_, t) => Xlsx.colLetter(4 + t));
+const XR = {
+  title: 2, year: 3, rev: 4, growth: 5, comm: 7, comm_pct: 8, net: 11,
+  cogs: 13, cogs_pct: 22, pay: 25, pay_pct: 26, exp: 29, exp_pct: 30,
+  amort: 31, noi: 32, margin: 33, capex: 36, capex_pct: 37, cash: 40, cum: 41,
+  roi: 43, total: 44, payback: 45, avgmargin: 46,
+  cat_head: 48, rate0: 49, mix_head: 58, mix0: 59,
+  staff_head: 79, staff0: 80, merit: 95, incentive: 96, profit: 97,
+  pay0: 102, exp0: 103, exp0_pct: 104, bonus: 105, invest: 106,
+  term_row: 107, rate: 108, frac: 109, legend: 112,
+};
+const XF = {
+  MONEY: '_(* #,##0_);_(* (#,##0);_(* "-"??_);_(@_)', PCT: "0.00%",
+  YELLOW: "FFFFFF00", GREEN: "FFC6EFCE", HEAD: "FFF2F5F8",
+  INK: "FF1D2430", MUTED: "FF6B7684", GREEN_INK: "FF006100", THIN: "FFD8DEE6",
+};
+
+function xlLabel(ws, row, text, bold = false, indent = 0) {
+  const c = ws.cell(`C${row}`);
+  c.value = String(text);
+  c.font = { sz: 11, b: bold, color: XF.INK };
+  c.align = { h: "left", indent };
+  return c;
+}
+function xlPut(ws, row, col, value, fmt = XF.MONEY, fill = null, bold = false, colour = XF.INK) {
+  const c = ws.cell(`${col}${row}`);
+  if (typeof value === "string" && value.startsWith("=")) { c.formula = value.slice(1); c.value = null; }
+  else { c.value = value; c.formula = null; }
+  c.numFmt = fmt;
+  c.font = { sz: 11, b: bold, color: colour };
+  if (fill) c.fill = fill;
+  return c;
+}
+function xlNote(ws, ref, text) {
+  const c = ws.cell(ref);
+  c.value = String(text);            // always text, even if it starts with "="
+  c.font = { sz: 11, i: true, color: XF.INK };
+  c.align = { h: "left" };
+}
+const topRule = c => { c.border = { top: XF.THIN }; };
+
+function xlScenarioSheet(name, p, note) {
+  const R = XR, F = XF;
+  const term = Number(p.term ?? DEFAULT_TERM);
+  const n = yearCount(term);
+  const cols = XL_COL.slice(0, n + 1);
+  const last = cols[n];
+  const growth = asYears(p.rev_growth, n);
+  const cogsPct = asYears(p.cogs ?? 0, n);
+  const expPct = asYears(p.expenses, n);
+  const capexPct = asYears(p.capex, n);
+  const nStaff = STAFF.length;
+  const titles = p.staff_titles || STAFF_TYPES;
+  const starts = p.staff_starts || filled(0, nStaff);
+  let bonus = p.signing_bonus ?? 0;
+  if (!Array.isArray(bonus)) bonus = [Number(bonus)].concat(filled(0, n));
+  bonus = bonus.concat(filled(0, n + 1)).slice(0, n + 1);
+  const first = R.staff0, lastS = R.staff0 + nStaff - 1;
+  const ycol = t => Xlsx.colLetter(7 + t);
+  const years = Array.from({ length: n }, (_, i) => i + 1);
+
+  const ws = new Xlsx.Sheet(name);
+  ws.width("A", 2); ws.width("B", 2); ws.width("C", 26);
+  for (const c of cols) ws.width(c, 15);
+
+  const t = ws.cell(`C${R.title}`);
+  t.value = `${name} - Hotel ROI Modeling Tool`;
+  t.font = { sz: 14, b: true, color: F.INK };
+  if (note) xlNote(ws, `${XL_COL[0]}${R.title}`, note);
+
+  cols.forEach((c, ti) => { xlPut(ws, R.year, c, ti, "0", F.HEAD, true, F.MUTED).align = { h: "right" }; });
+  const hdr = ws.cell(`C${R.year}`);
+  hdr.value = "Year"; hdr.font = { sz: 11, b: true, color: F.MUTED }; hdr.fill = F.HEAD;
+
+  // Gross revenue: run rate (row 108) times the share of the year billed (row 109).
+  xlLabel(ws, R.rev, "Gross Revenue", true);
+  xlPut(ws, R.rev, cols[0], p.gross_revenue, F.MONEY, F.YELLOW);
+  for (const ti of years) { const c = cols[ti]; xlPut(ws, R.rev, c, `=${c}${R.rate}*${c}${R.frac}`); }
+
+  xlLabel(ws, R.growth, "Revenue Growth", false, 1);
+  for (const ti of years) xlPut(ws, R.growth, cols[ti], growth[ti - 1] / 100, F.PCT, F.YELLOW);
+
+  // Commission: blended from the category block further down.
+  xlLabel(ws, R.comm, "Commission");
+  xlLabel(ws, R.comm_pct, "Commission %", false, 1);
+  const rateSpan = `$D$${R.rate0}:$D$${R.rate0 + CATEGORIES.length - 1}`;
+  const mixSpan = `$D$${R.mix0}:$D$${R.mix0 + CATEGORIES.length - 1}`;
+  xlPut(ws, R.comm_pct, cols[1], `=SUMPRODUCT(${rateSpan},${mixSpan})`, F.PCT);
+  for (const ti of years) {
+    xlPut(ws, R.comm, cols[ti], `=${cols[ti]}${R.rev}*${cols[ti]}${R.comm_pct}`);
+    if (ti > 1) xlPut(ws, R.comm_pct, cols[ti], `=$${cols[1]}$${R.comm_pct}`, F.PCT);
+  }
+
+  xlLabel(ws, R.net, "Net Revenue", true);
+  for (const ti of years) {
+    const c = cols[ti];
+    topRule(xlPut(ws, R.net, c, `=${c}${R.rev}-${c}${R.comm}`, F.MONEY, null, true));
+  }
+  topRule(ws.cell(`C${R.net}`));
+
+  // COGS: one input rate per year, against net revenue.
+  xlLabel(ws, R.cogs, "COGS");
+  xlLabel(ws, R.cogs_pct, "COGS %", false, 1);
+  for (const ti of years) {
+    const c = cols[ti];
+    xlPut(ws, R.cogs, c, `=${c}${R.net}*${c}${R.cogs_pct}`);
+    xlPut(ws, R.cogs_pct, c, cogsPct[ti - 1] / 100, F.PCT, F.YELLOW);
+  }
+
+  xlLabel(ws, R.exp, "Expenses");
+  xlLabel(ws, R.exp_pct, "Expenses %", false, 1);
+  for (const ti of years) {
+    const c = cols[ti];
+    xlPut(ws, R.exp, c, `=${c}${R.net}*${c}${R.exp_pct}`);
+    xlPut(ws, R.exp_pct, c, expPct[ti - 1] / 100, F.PCT, F.YELLOW);
+  }
+
+  xlLabel(ws, R.pay, "Payroll");
+  xlLabel(ws, R.pay_pct, "Payroll % of net revenue", false, 1);
+  for (const ti of years) {
+    const c = cols[ti], yc = ycol(ti);
+    xlPut(ws, R.pay, c, `=SUM(${yc}${first}:${yc}${lastS})+${c}${R.rev}*$D$${R.incentive}+${c}${R.net}*$D$${R.profit}`);
+    xlPut(ws, R.pay_pct, c, `=${c}${R.pay}/${c}${R.net}`, F.PCT, null, false, F.MUTED);
+  }
+
+  xlLabel(ws, R.amort, "Bonus Amortization");
+  for (const ti of years) {
+    const c = cols[ti];
+    xlPut(ws, R.amort, c, `=$D$${R.bonus}/$D$${R.term_row}*${c}${R.frac}+${c}${R.bonus}*${c}${R.frac}`,
+          F.MONEY, null, false, F.MUTED);
+  }
+
+  xlLabel(ws, R.noi, "NOI", true);
+  xlLabel(ws, R.margin, "NOI Margin", false, 1);
+  for (const ti of years) {
+    const c = cols[ti];
+    topRule(xlPut(ws, R.noi, c, `=${c}${R.net}-${c}${R.cogs}-${c}${R.pay}-${c}${R.exp}-${c}${R.amort}`,
+                  F.MONEY, null, true));
+    xlPut(ws, R.margin, c, `=${c}${R.noi}/${c}${R.net}`, F.PCT, null, false, F.MUTED);
+  }
+  topRule(ws.cell(`C${R.noi}`));
+
+  xlLabel(ws, R.capex, "Capex Investment");
+  xlLabel(ws, R.capex_pct, "Capex %", false, 1);
+  xlPut(ws, R.capex, cols[0], `=${cols[1]}${R.rate}*${cols[0]}${R.capex_pct}`);
+  xlPut(ws, R.capex_pct, cols[0], p.capex_initial / 100, F.PCT, F.YELLOW);
+  for (const ti of years) {
+    const c = cols[ti];
+    xlPut(ws, R.capex, c, `=${c}${R.rev}*${c}${R.capex_pct}`);
+    xlPut(ws, R.capex_pct, c, capexPct[ti - 1] / 100, F.PCT, F.YELLOW);
+  }
+
+  xlLabel(ws, R.cash, "Net Cash", true);
+  xlLabel(ws, R.cum, "Cumulative Net Cash", false, 1);
+  xlPut(ws, R.cash, cols[0], `=-${cols[0]}${R.invest}`, F.MONEY, null, true);
+  xlPut(ws, R.cum, cols[0], `=${cols[0]}${R.cash}`, F.MONEY, null, false, F.MUTED);
+  for (const ti of years) {
+    const c = cols[ti], prev = cols[ti - 1];
+    topRule(xlPut(ws, R.cash, c, `=${c}${R.noi}-${c}${R.capex}-${c}${R.bonus}*${c}${R.frac}+${c}${R.amort}`,
+                  F.MONEY, null, true));
+    xlPut(ws, R.cum, c, `=${prev}${R.cum}+${c}${R.cash}`, F.MONEY, null, false, F.MUTED);
+  }
+  topRule(ws.cell(`C${R.cash}`));
+
+  // The answer. RATE is guarded: a return exists only if the flows turn positive.
+  const cash0 = `${cols[0]}${R.cash}`;
+  const cashRange = `${cols[0]}${R.cash}:${last}${R.cash}`;
+  xlLabel(ws, R.roi, "ROI", true);
+  const roi = xlPut(ws, R.roi, cols[0],
+    `=IFERROR(IF(-SUM(${cashRange})/${cash0}<=0,"n/a",RATE($D$${R.term_row},,${cash0},SUM(${cashRange}))),"n/a")`,
+    F.PCT, F.GREEN, true, F.GREEN_INK);
+  roi.border = { top: F.THIN, bottom: F.THIN, left: F.THIN, right: F.THIN };
+
+  xlLabel(ws, R.total, "Total Net Cash");
+  xlPut(ws, R.total, cols[0], `=SUM(${cashRange})`);
+
+  const cumRange = `${cols[0]}${R.cum}:${last}${R.cum}`;
+  const fracRange = `${cols[0]}${R.frac}:${last}${R.frac}`;
+  const idx = `MATCH(TRUE,INDEX(${cumRange}>=0,0),0)`;
+  xlLabel(ws, R.payback, "Payback (years)");
+  xlPut(ws, R.payback, cols[0],
+    `=IF(MAX(${cumRange})<0,"never",IF(${cols[0]}${R.cum}>=0,0,` +
+    `(${idx}-2)+INDEX(${fracRange},${idx})*(-INDEX(${cumRange},${idx}-1))/` +
+    `(INDEX(${cumRange},${idx})-INDEX(${cumRange},${idx}-1))))`, "0.0");
+
+  xlLabel(ws, R.cat_head, "Contract Commission Rates", true);
+  CATEGORIES.forEach((cat, i) => {
+    xlLabel(ws, R.rate0 + i, cat, false, 1);
+    xlPut(ws, R.rate0 + i, "D", p.commission_rates[i] / 100, F.PCT, F.YELLOW);
+  });
+  xlLabel(ws, R.mix_head, "Sales By Category", true);
+  CATEGORIES.forEach((cat, i) => {
+    xlLabel(ws, R.mix0 + i, cat, false, 1);
+    xlPut(ws, R.mix0 + i, "D", p.sales_mix[i] / 100, F.PCT, F.YELLOW);
+  });
+  xlLabel(ws, R.mix0 + CATEGORIES.length, "Total", true);
+  xlPut(ws, R.mix0 + CATEGORIES.length, "D", `=SUM(${mixSpan})`, F.PCT, null, true);
+
+  const noiSpan = `${cols[1]}${R.noi}:${last}${R.noi}`;
+  const netSpan = `${cols[1]}${R.net}:${last}${R.net}`;
+  xlLabel(ws, R.avgmargin, "Avg NOI Margin");
+  xlPut(ws, R.avgmargin, cols[0], `=IFERROR(SUM(${noiSpan})/SUM(${netSpan}),0)`, F.PCT);
+
+  // Staffing roster, with the per-year merit build-out of "Payroll Calculation".
+  xlLabel(ws, R.staff_head, "Staff Roster", true);
+  const heads = [["D", "Start month"], ["E", "Salary"], ["F", "Benefit load"], ["G", "With benefits"]];
+  for (const ti of years) { heads.push([ycol(ti), `Year ${ti}`]); ws.width(ycol(ti), 14); }
+  for (const [col, cap] of heads) {
+    const h = ws.cell(`${col}${R.staff_head}`);
+    h.value = cap; h.font = { sz: 10, b: true, color: F.MUTED }; h.align = { h: "right" };
+  }
+  const meritRef = `$D$${R.merit}`;
+  titles.forEach((title, i) => {
+    const row = R.staff0 + i;
+    xlLabel(ws, row, title, false, 1);
+    xlPut(ws, row, "D", starts[i], "0", F.YELLOW);
+    xlPut(ws, row, "E", p.staff_salaries[i], F.MONEY, F.YELLOW);
+    xlPut(ws, row, "F", p.staff_loads[i] / 100, F.PCT);
+    xlPut(ws, row, "G", `=$E${row}*(1+$F${row})`);
+    for (const ti of years) {
+      const fr = `$${cols[ti]}$${R.frac}`;
+      const start = `MAX(0,12*(${ti}-1)-$D${row})`;
+      const end = `MAX(0,12*(${ti}-1)+12*${fr}-$D${row})`;
+      const k = `INT(${start}/12)`;
+      const cap = `12*(${k}+1)`;
+      const atK = `(MIN(${end},${cap})-${start})`;
+      const atK1 = `(${end}-MIN(${end},${cap}))`;
+      xlPut(ws, row, ycol(ti), `=$G${row}*((1+${meritRef})^${k}*${atK}+(1+${meritRef})^(${k}+1)*${atK1})/12`);
+    }
+  });
+  const totalRow = R.staff0 + nStaff;
+  xlLabel(ws, totalRow, "Roster cost", true);
+  for (const ti of years) {
+    const yc = ycol(ti);
+    xlPut(ws, totalRow, yc, `=SUM(${yc}${first}:${yc}${lastS})`, F.MONEY, null, true);
+  }
+
+  // What year 0 costs: capex, the pre-opening month of payroll, start-up expense, bonus.
+  xlLabel(ws, R.pay0, "Year-0 Payroll", true);
+  xlPut(ws, R.pay0, cols[0], `=SUM($G$${first}:$G$${lastS})/12`, F.MONEY);
+  xlLabel(ws, R.exp0, "Year-0 Expenses");
+  xlPut(ws, R.exp0, cols[0], `=${cols[1]}${R.rate}*$D$${R.exp0_pct}`, F.MONEY);
+  xlLabel(ws, R.exp0_pct, "Year-0 Expenses %", false, 1);
+  xlPut(ws, R.exp0_pct, "D", (p.year0_expense_pct ?? 0) / 100, F.PCT, F.YELLOW);
+  xlLabel(ws, R.bonus, "Signing Bonus");
+  for (let ti = 0; ti <= n; ti++) xlPut(ws, R.bonus, cols[ti], bonus[ti], F.MONEY, F.YELLOW);
+  xlLabel(ws, R.invest, "Initial Investment", true);
+  xlPut(ws, R.invest, cols[0],
+    `=${cols[0]}${R.capex}+${cols[0]}${R.pay0}+${cols[0]}${R.exp0}+${cols[0]}${R.bonus}`, F.MONEY, null, true);
+
+  xlLabel(ws, R.merit, "Merit Increase");
+  xlPut(ws, R.merit, "D", (p.merit ?? 0) / 100, F.PCT, F.YELLOW);
+  xlLabel(ws, R.incentive, "Incentives & Bonus (of gross revenue)");
+  xlPut(ws, R.incentive, "D", (p.incentive_pct ?? 0) / 100, F.PCT, F.YELLOW);
+  xlLabel(ws, R.profit, "Profit Sharing (of net revenue)");
+  xlPut(ws, R.profit, "D", (p.profit_share_pct ?? 0) / 100, F.PCT, F.YELLOW);
+
+  // The term is an input like any other: type 6.25 and every figure reprices.
+  xlLabel(ws, R.term_row, "Contract Term (years)", true);
+  xlPut(ws, R.term_row, "D", term, "0.00", F.YELLOW);
+
+  xlLabel(ws, R.rate, "Gross Revenue (annual run rate)");
+  xlPut(ws, R.rate, cols[0], `=${cols[0]}${R.rev}`, F.MONEY, null, false, F.MUTED);
+  for (const ti of years) {
+    xlPut(ws, R.rate, cols[ti], `=${cols[ti - 1]}${R.rate}*(1+${cols[ti]}${R.growth})`, F.MONEY, null, false, F.MUTED);
+  }
+
+  xlLabel(ws, R.frac, "Year Fraction Billed", false, 1);
+  xlPut(ws, R.frac, cols[0], 1, F.PCT, null, false, F.MUTED);
+  for (const ti of years) {
+    xlPut(ws, R.frac, cols[ti], `=MEDIAN(0,$D$${R.term_row}-${ti - 1},1)`, F.PCT, null, false, F.MUTED);
+  }
+
+  const legend = ws.cell(`C${R.legend}`);
+  legend.value = "Yellow cells are inputs - change any of them and every figure above, ROI included, recalculates.";
+  legend.font = { sz: 9, i: true, color: F.MUTED };
+  ws.freeze = `D${R.year + 1}`;
+  return ws;
+}
+
+/* `scenarios` is a list of model-input objects; returns the .xlsx bytes. */
+function buildWorkbook(scenarios, active = 0, names = null, note = "") {
+  const F = XF, R = XR;
+  names = names || scenarios.map((_, i) => `Scenario ${i + 1}`);
+  const summary = new Xlsx.Sheet("Comparison");
+  summary.width("A", 2); summary.width("B", 2); summary.width("C", 26);
+  const t = summary.cell("C2");
+  t.value = "Hotel ROI Modeling Tool - scenario comparison";
+  t.font = { sz: 14, b: true, color: F.INK };
+  if (note) xlNote(summary, "D2", note);
+  const sub = summary.cell("C3");
+  sub.value = "Every figure below is a live reference into the scenario sheets.";
+  sub.font = { sz: 9, i: true, color: F.MUTED };
+
+  names.forEach((name, i) => {
+    const col = Xlsx.colLetter(4 + i);
+    summary.width(col, 16);
+    const head = summary.cell(`${col}5`);
+    head.value = name + (i === active ? " (active)" : "");
+    head.font = { sz: 11, b: true, color: F.MUTED };
+    head.fill = F.HEAD;
+    head.align = { h: "right" };
+  });
+
+  const rows = [["Contract Term (years)", "term", "0.00", false],
+                ["ROI", R.roi, F.PCT, true],
+                ["Total Net Cash", R.total, F.MONEY, false],
+                ["Payback (years)", R.payback, "0.0", false],
+                ["Avg NOI Margin", R.avgmargin, F.PCT, false]];
+  rows.forEach(([label, src, fmt, isRoi], k) => {
+    const r = 6 + k;
+    const c = summary.cell(`C${r}`);
+    c.value = label; c.font = { sz: 11, b: isRoi, color: F.INK };
+    names.forEach((name, i) => {
+      const cell = summary.cell(`${Xlsx.colLetter(4 + i)}${r}`);
+      const sheetRef = `'${name.replace(/'/g, "''")}'`;
+      cell.formula = src === "term" ? `${sheetRef}!$D$${R.term_row}` : `${sheetRef}!${XL_COL[0]}${src}`;
+      cell.numFmt = fmt;
+      cell.font = { sz: 11, b: isRoi, color: isRoi ? F.GREEN_INK : F.INK };
+      if (isRoi) cell.fill = F.GREEN;
+    });
+  });
+
+  const sheets = [summary].concat(scenarios.map((p, i) => xlScenarioSheet(names[i], p, note)));
+  return Xlsx.build(sheets);
+}
+/* @core-end */
+</script>
+
+<script id="ui">
+"use strict";
+
+const APP_TITLE = "Hotel ROI Modeling Tool";
+const SCENARIOS = 3;
+// Same marker the desktop app writes, so setup files move freely between them.
+const SETUP_FORMAT = "roi-model-setup";
+const SETUP_VERSION = 1;
+
+/* ------------------------------------------------------------- helpers -- */
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids) if (kid != null) el.append(kid);
+  return el;
+}
+
+function parseNumber(text) {
+  const v = parseFloat(String(text).replace(/[,$%\s]/g, ""));
+  return Number.isFinite(v) ? v : null;
+}
+
+function download(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = h("a", { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+let toastTimer = null;
+function toast(message, error = false) {
+  const el = document.getElementById("toast");
+  el.textContent = message;
+  el.classList.toggle("err", error);
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, error ? 8000 : 5000);
+}
+
+/* -------------------------------------------------------------- slider -- */
+/* Label, value field and a track. With track:false only the field is shown,
+   so the value is typed and can take a step no track could land on. */
+class Slider {
+  constructor(parent, { label, lo, hi, step, value, kind = "pct", onChange, sub = null, track = true }) {
+    Object.assign(this, { lo, hi, step, kind, onChange });
+    this.value = value;
+    this.el = h("div", { class: "ctl" });
+    this.field = h("input", { class: "field" + (track ? "" : " wide"), type: "text",
+                              inputmode: "decimal", autocomplete: "off", "aria-label": label });
+    this.el.append(h("div", { class: "ctl-head" }, h("label", { text: label }), this.field));
+    this.field.addEventListener("change", () => this.fromField());
+    this.field.addEventListener("keydown", e => { if (e.key === "Enter") this.fromField(); });
+    this.range = null;
+    if (track) {
+      this.range = h("input", { type: "range", min: lo, max: hi, step, "aria-label": label });
+      this.range.addEventListener("input", () => this._set(Number(this.range.value)));
+      this.el.append(this.range, h("div", { class: "ends" },
+        h("span", { text: this.edge(lo) }), h("span", { text: sub || "" }), h("span", { text: this.edge(hi) })));
+    }
+    parent.append(this.el);
+    this.sync();
+  }
+  edge(v) { return this.kind === "money" ? money(v) : fmtG(v); }
+  snap(v) {
+    v = Math.round(v / this.step) * this.step;
+    return Math.round(Math.min(Math.max(v, this.lo), this.hi) * 1e6) / 1e6;
+  }
+  fromField() {
+    const v = parseNumber(this.field.value);
+    if (v == null) this.sync();
+    else this._set(v);
+  }
+  /* Only dragging and typing snap; values restored from a scenario or the
+     workbook keep full precision, so the app opens on the real numbers. */
+  _set(v, notify = true, snap = true) {
+    v = snap ? this.snap(v) : Math.min(Math.max(v, this.lo), this.hi);
+    const changed = v !== this.value;
+    this.value = v;
+    this.sync();
+    if (changed && notify) this.onChange();
+  }
+  sync() {
+    const v = this.value;
+    this.field.value = this.kind === "money" ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : fmtG(v);
+    if (this.range) {
+      this.range.value = v;
+      this.range.style.setProperty("--f", (v - this.lo) / (this.hi - this.lo));
+    }
+  }
+  get() { return this.value; }
+  set(v, snap = false) { this._set(v, false, snap); }
+}
+
+/* One lead slider that drives a slider per year, revealed on demand. */
+class SliderGroup {
+  constructor(parent, { label, lo, hi, step, def, onChange, sub = null, kind = "pct", perYearOnly = false }) {
+    this.onChange = onChange;
+    this.perYearOnly = perYearOnly;
+    this.pushing = false;
+    this.count = MAX_YEARS;
+    this.visible = this.count;
+    const values = asYears(def, this.count);
+
+    this.el = h("div", { class: "group" });
+    this.lead = new Slider(this.el, { label, lo, hi, step, kind, sub, value: leadValue(values),
+                                      onChange: () => this.leadMoved() });
+    this.check = h("input", { type: "checkbox" });
+    this.toggleText = h("span");
+    this.toggle = h("label", { class: "toggle" }, this.check, this.toggleText);
+    this.check.addEventListener("change", () => { this.setExpanded(this.check.checked); this.onChange(); });
+    this.el.append(this.toggle);
+    this.box = h("div", { class: "inset" });
+    if (perYearOnly) {
+      // With no lead slider the rows need a heading of their own.
+      this.lead.el.hidden = true;
+      this.toggle.hidden = true;
+      this.box.append(h("p", { class: "sub-head", text: label }));
+    }
+    this.el.append(this.box);
+    this.rows = values.map((v, i) => new Slider(this.box, {
+      label: `Year ${i + 1}`, lo, hi, step, kind, value: v,
+      onChange: () => { if (!this.pushing) this.onChange(); },
+    }));
+    // A series the workbook varies year by year opens already expanded.
+    this.setExpanded(perYearOnly || !isUniform(values));
+    this.setTerm(this.count);
+    parent.append(this.el);
+  }
+  setExpanded(on) {
+    this.expanded = on;
+    this.check.checked = on;
+    this.box.hidden = !on;
+  }
+  setTerm(years) {
+    this.visible = Math.max(0, Math.min(this.count, years));
+    this.rows.forEach((s, i) => { s.el.hidden = i >= this.visible; });
+    this.toggleText.textContent = `set each year individually (${this.visible} years)`;
+  }
+  leadMoved() {
+    this.pushing = true;
+    for (const s of this.rows) s.set(this.lead.get());
+    this.pushing = false;
+    this.onChange();
+  }
+  values() {
+    const n = Math.max(1, this.visible);
+    return this.expanded ? this.rows.slice(0, n).map(s => s.get()) : filled(this.lead.get(), n);
+  }
+  snapshot() {
+    return [this.lead.get(), this.rows.map(s => s.get()), this.expanded];
+  }
+  restore([lead, rows, expanded]) {
+    this.lead.set(lead);
+    this.rows.forEach((s, i) => { if (i < rows.length) s.set(rows[i]); });
+    if (!this.perYearOnly) this.setExpanded(!!expanded);
+  }
+  setValues(def) {
+    const values = asYears(def, this.count);
+    this.lead.set(leadValue(values));
+    this.rows.forEach((s, i) => s.set(values[i]));
+    if (!this.perYearOnly) this.setExpanded(!isUniform(values));
+  }
+}
+
+/* One line of the workbook's staffing table. Title, start month and salary
+   are editable; the type and benefit load are fixed by the sheet. */
+class RosterRow {
+  constructor(parent, { kind, title, start, salary, load, onChange }) {
+    Object.assign(this, { kind, load, onChange });
+    this.el = h("div", { class: "role" });
+    this.fTitle = h("input", { class: "field text", type: "text", value: title, "aria-label": "Role title" });
+    this.fStart = h("input", { class: "field narrow", type: "text", inputmode: "decimal",
+                               value: fmtG(start), "aria-label": `${title} start month`,
+                               title: "Start month, relative to year 1 (-1 = one month before opening)" });
+    this.el.append(h("div", { class: "top" }, this.fTitle, h("span", { text: "start" }), this.fStart));
+    for (const f of [this.fTitle, this.fStart]) {
+      f.addEventListener("change", () => this.edited());
+    }
+    this.salary = new Slider(this.el, { label: kind, lo: 0, hi: 300000, step: 500, value: salary,
+                                        kind: "money", onChange: () => this.edited() });
+    this.noteEl = h("p", { class: "tick" });
+    this.el.append(this.noteEl);
+    parent.append(this.el);
+    this.refresh();
+  }
+  edited() {
+    this.fStart.value = fmtG(this.start());
+    this.refresh();
+    this.onChange();
+  }
+  refresh() {
+    const loaded = this.salary.get() * (1 + this.load / 100);
+    this.noteEl.textContent = `${fmtG(this.load)}% benefits · $${money(loaded)} loaded`;
+  }
+  title() { return this.fTitle.value.trim(); }
+  start() { return parseNumber(this.fStart.value) ?? 0; }
+  snapshot() { return [this.title(), this.start(), this.salary.get()]; }
+  restore([title, start, salary]) {
+    this.fTitle.value = title;
+    this.fStart.value = fmtG(start);
+    this.salary.set(salary);
+    this.refresh();
+  }
+}
+
+/* ================================================================= app === */
+const D = DEFAULTS;
+const ui = {};
+let active = 0;
+let scenarios = [];
+let lastResult = null;
+let frame = 0;
+
+function recalcSoon() {
+  if (!frame) frame = requestAnimationFrame(() => { frame = 0; recalc(); });
+}
+
+function section(parent, title) {
+  const s = h("div", { class: "section" }, h("h2", { text: title }));
+  parent.append(s);
+  return s;
+}
+function keyValue(parent, label) {
+  const v = h("span", { class: "v", text: "-" });
+  parent.append(h("div", { class: "kv" }, h("span", { class: "k", text: label }), v));
+  return v;
+}
+
+function buildParams() {
+  const root = document.getElementById("params");
+  const r = recalcSoon;
+
+  let g = section(root, "Contract Term (Years)");
+  ui.term = new Slider(g, { label: "Contract Term", lo: 1, hi: MAX_YEARS, step: TERM_STEP, value: D.term,
+                            sub: "operating years, quarter-year steps",
+                            onChange: () => { applyTerm(); recalcSoon(); } });
+
+  g = section(root, "Revenue");
+  ui.revenue = new Slider(g, { label: "Gross Revenue (Year 0)", lo: 0, hi: 1e9, step: 1,
+                               value: D.gross_revenue, kind: "money", track: false, onChange: r });
+  ui.growth = new SliderGroup(g, { label: "Revenue Growth", lo: -10, hi: 30, step: 0.25,
+                                   def: D.rev_growth, onChange: r, perYearOnly: true });
+
+  // The share of sales each category represents: half of the commission blend.
+  g = section(root, "Sales By Category");
+  ui.mixLbl = h("p", { class: "tick" });
+  g.append(ui.mixLbl);
+  let box = h("div", { class: "inset" });
+  g.append(box);
+  ui.mix = CATEGORIES.map((cat, i) => new Slider(box, { label: cat, lo: 0, hi: 100, step: 0.25,
+                                                         value: D.sales_mix[i], onChange: r }));
+
+  g = section(root, "Commission");
+  ui.commLbl = keyValue(g, "Blended Commission");
+  box = h("div", { class: "inset" }, h("p", { class: "sub-head", text: "Contract Commission Rates" }));
+  g.append(box);
+  ui.rates = CATEGORIES.map((cat, i) => new Slider(box, { label: cat, lo: 0, hi: 100, step: 0.25,
+                                                           value: D.commission_rates[i], onChange: r }));
+
+  g = section(root, "Cost Structure");
+  ui.cogs = new SliderGroup(g, { label: "COGS", lo: 0, hi: 60, step: 0.25, def: D.cogs,
+                                 sub: "% of net revenue", onChange: r });
+  ui.expenses = new SliderGroup(g, { label: "Expenses", lo: 0, hi: 60, step: 0.25, def: D.expenses,
+                                     sub: "% of net revenue", onChange: r });
+
+  // Payroll is built from the staffing roster, not entered as a share of revenue.
+  g = section(root, "Payroll");
+  ui.payLbl = keyValue(g, "Payroll (Year 1)");
+  ui.paySub = h("p", { class: "tick" });
+  g.append(ui.paySub);
+  ui.rosterCheck = h("input", { type: "checkbox" });
+  g.append(h("label", { class: "toggle" }, ui.rosterCheck,
+             h("span", { text: `set the staff roster (${STAFF.length} roles)` })));
+  ui.rosterBox = h("div", { class: "inset", hidden: true });
+  g.append(ui.rosterBox);
+  ui.rosterCheck.addEventListener("change", () => { ui.rosterBox.hidden = !ui.rosterCheck.checked; });
+  ui.roster = STAFF.map((s, i) => new RosterRow(ui.rosterBox, {
+    kind: STAFF_TYPES[i], title: D.staff_titles[i], start: D.staff_starts[i],
+    salary: D.staff_salaries[i], load: D.staff_loads[i], onChange: r }));
+  const payWrap = h("div");
+  g.append(payWrap);
+  payWrap.style.marginTop = "18px";
+  ui.merit = new Slider(payWrap, { label: "Merit Increase", lo: 0, hi: 15, step: 0.25, value: D.merit,
+                                   sub: "a year, across the roster", onChange: r });
+  ui.incentive = new Slider(payWrap, { label: "Incentives & Bonus", lo: 0, hi: 10, step: 0.25,
+                                       value: D.incentive_pct, sub: "% of gross revenue", onChange: r });
+  ui.profit = new Slider(payWrap, { label: "Profit Sharing", lo: 0, hi: 10, step: 0.25,
+                                    value: D.profit_share_pct, sub: "% of net revenue", onChange: r });
+
+  // Initial Investment = capex + a month of payroll + start-up expense + signing bonus.
+  g = section(root, "Capital");
+  ui.investLbl = keyValue(g, "Initial Investment");
+  ui.investSub = h("p", { class: "tick" });
+  g.append(ui.investSub);
+  const capWrap = h("div");
+  capWrap.style.marginTop = "14px";
+  g.append(capWrap);
+  ui.capex0 = new Slider(capWrap, { label: "Initial Capex (Year 0)", lo: 0, hi: 150, step: 0.25,
+                                    value: D.capex_initial, sub: "% of year-1 gross revenue", onChange: r });
+  ui.year0Exp = new Slider(capWrap, { label: "Year-0 Expenses", lo: 0, hi: 10, step: 0.05,
+                                      value: D.year0_expense_pct, sub: "% of year-1 gross revenue", onChange: r });
+  ui.bonus = new Slider(capWrap, { label: "Signing Bonus (Year 0)", lo: 0, hi: 500000, step: 1000,
+                                   value: D.signing_bonus[0], kind: "money",
+                                   sub: "part of the initial investment", onChange: r });
+  ui.bonusYr = new SliderGroup(capWrap, { label: "Signing Bonus (Yearly)", lo: 0, hi: 500000, step: 1000,
+                                          def: D.signing_bonus.slice(1), kind: "money",
+                                          sub: "each operating year", onChange: r });
+  ui.capex = new SliderGroup(capWrap, { label: "Ongoing Capex", lo: 0, hi: 30, step: 0.25,
+                                        def: D.capex, onChange: r });
+
+  ui.groups = { growth: ui.growth, cogs: ui.cogs, expenses: ui.expenses, capex: ui.capex, bonus_yr: ui.bonusYr };
+}
+
+function applyTerm() {
+  const n = yearCount(ui.term.get());
+  for (const g of Object.values(ui.groups)) g.setTerm(n);
+  return n;
+}
+
+/* ---------------------------------------------------------- snapshots -- */
+/* The same shape the desktop app saves, so setup files interchange. */
+function snapshot() {
+  const groups = {};
+  for (const [name, g] of Object.entries(ui.groups)) groups[name] = g.snapshot();
+  return {
+    term: ui.term.get(),
+    rev: ui.revenue.get(),
+    rates: ui.rates.map(s => s.get()),
+    mix: ui.mix.map(s => s.get()),
+    merit: ui.merit.get(),
+    incentive: ui.incentive.get(),
+    profit: ui.profit.get(),
+    roster: ui.roster.map(row => row.snapshot()),
+    roster_open: ui.rosterCheck.checked,
+    capex0: ui.capex0.get(),
+    year0_exp: ui.year0Exp.get(),
+    bonus: ui.bonus.get(),
+    groups,
+  };
+}
+
+function restore(snap) {
+  ui.term.set(snap.term);
+  ui.revenue.set(snap.rev);
+  ui.merit.set(snap.merit);
+  ui.incentive.set(snap.incentive);
+  ui.profit.set(snap.profit);
+  ui.capex0.set(snap.capex0);
+  ui.year0Exp.set(snap.year0_exp);
+  ui.bonus.set(snap.bonus);
+  ui.roster.forEach((row, i) => row.restore(snap.roster[i]));
+  ui.rosterCheck.checked = !!snap.roster_open;
+  ui.rosterBox.hidden = !snap.roster_open;
+  ui.rates.forEach((s, i) => s.set(snap.rates[i]));
+  ui.mix.forEach((s, i) => s.set(snap.mix[i]));
+  for (const [name, g] of Object.entries(ui.groups)) g.restore(snap.groups[name]);
+  applyTerm();
+  recalc();
+}
+
+/* Model inputs for a snapshot. A collapsed group contributes its lead value
+   for every year, and only the years inside the term are passed on. */
+function paramsFrom(snap) {
+  const term = Number(snap.term);
+  const n = yearCount(term);
+  const series = name => {
+    const [lead, rows, expanded] = snap.groups[name];
+    return expanded ? rows.slice(0, n) : filled(lead, n);
+  };
+  return {
+    term,
+    gross_revenue: snap.rev,
+    rev_growth: series("growth"),
+    commission_rates: snap.rates.slice(),
+    sales_mix: snap.mix.slice(),
+    cogs: series("cogs"),
+    expenses: series("expenses"),
+    staff_titles: snap.roster.map(r => r[0]),
+    staff_starts: snap.roster.map(r => r[1]),
+    staff_salaries: snap.roster.map(r => r[2]),
+    staff_loads: ui.roster.map(row => row.load),
+    merit: snap.merit,
+    incentive_pct: snap.incentive,
+    profit_share_pct: snap.profit,
+    capex_initial: snap.capex0,
+    capex: series("capex"),
+    year0_expense_pct: snap.year0_exp,
+    signing_bonus: [snap.bonus].concat(series("bonus_yr")),
+  };
+}
+
+const roiText = r => r.roi != null ? pct(r.roi, 2) : "n/a";
+
+/* ---------------------------------------------------------- scenarios -- */
+function buildScenarioButtons() {
+  const host = document.getElementById("scenarios");
+  ui.scen = [];
+  for (let i = 0; i < SCENARIOS; i++) {
+    const val = h("span", { class: "val", text: "-" });
+    const b = h("button", { class: "scen", type: "button", "aria-label": `Scenario ${i + 1}` },
+                h("span", { class: "name", text: `Scenario ${i + 1}` }), val);
+    b.addEventListener("click", () => selectScenario(i));
+    host.append(b);
+    ui.scen.push({ b, val });
+  }
+}
+
+function saveActive() {
+  const snap = snapshot();
+  snap.roi = roiText(compute(paramsFrom(snap)));
+  scenarios[active] = snap;
+}
+
+function paintScenarios() {
+  ui.scen.forEach(({ b, val }, i) => {
+    b.classList.toggle("active", i === active);
+    b.setAttribute("aria-pressed", i === active);
+    if (i !== active && scenarios[i]) val.textContent = scenarios[i].roi || "-";
+  });
+}
+
+function selectScenario(i) {
+  saveActive();
+  if (i !== active) {
+    active = i;
+    restore(scenarios[i]);
+  }
+  paintScenarios();
+}
+
+/* Copy what is on screen into all three scenarios, each its own copy. */
+function saveAcross() {
+  const text = roiText(compute(paramsFrom(snapshot())));
+  scenarios = [];
+  for (let i = 0; i < SCENARIOS; i++) {
+    const snap = snapshot();
+    snap.roi = text;
+    scenarios.push(snap);
+  }
+  paintScenarios();
+  toast(`Copied the current inputs into all ${SCENARIOS} scenarios.`);
+}
+
+/* ------------------------------------------------------------- recalc -- */
+function recalc() {
+  const r = lastResult = compute(paramsFrom(snapshot()));
+  const $ = id => document.getElementById(id);
+
+  $("roi").textContent = roiText(r);
+  $("roi").classList.toggle("neg", (r.roi || 0) < 0);
+  if (ui.scen) ui.scen[active].val.textContent = roiText(r);
+  $("stat-invest").textContent = "$" + money(-r.net_cash[0]);
+  $("stat-total").textContent = "$" + money(r.total);
+  $("stat-total").classList.toggle("neg", r.total < 0);
+  $("stat-payback").textContent = r.payback != null ? `${r.payback.toFixed(1)} yrs` : "never";
+  $("stat-margin").textContent = pct(r.avg_margin);
+  $("hero-note").textContent =
+    `annualized on the year-0 capex, over ${fmtG(r.term)} year${r.term === 1 ? "" : "s"}`;
+
+  ui.commLbl.textContent = pct(r.commission_pct / 100, 2);
+  ui.investLbl.textContent = "$" + money(r.invest[0]);
+  ui.investSub.textContent = `capex $${money(r.capex[0])} + payroll $${money(r.year0_payroll)}` +
+    ` + expenses $${money(r.year0_expense)} + bonus $${money(r.year0_bonus)}`;
+  ui.payLbl.textContent = "$" + money(r.payroll[1]);
+  const share = r.net_rev[1] ? r.payroll[1] / r.net_rev[1] : 0;
+  ui.paySub.textContent = `${pct(share)} of year-1 net revenue · roster $${money(r.staff_base)} before merit`;
+  const totalMix = ui.mix.reduce((a, s) => a + s.get(), 0);
+  ui.mixLbl.textContent = Math.abs(totalMix - 100) < 0.005
+    ? `mix totals ${fmtG(totalMix)}%`
+    : `mix totals ${fmtG(totalMix)}% - it should total 100%`;
+  ui.mixLbl.classList.toggle("warn", Math.abs(totalMix - 100) >= 0.005);
+
+  renderTable(r);
+  renderChart(r);
+}
+
+const ROW_CLASS = { _growth: "r-soft", net_rev: "r-head", noi: "r-head", margin: "r-soft",
+                    payroll_pct: "r-soft", net_cash: "r-cash", cumulative: "r-soft" };
+
+/* A fractional term ends in a stub year, which still gets a column; its
+   header says how many months it carries so it is never read as a full year. */
+function renderTable(r) {
+  const n = r.years;
+  const table = document.getElementById("model");
+  const head = h("tr", {}, h("th", { text: "" }));
+  for (let t = 0; t <= n; t++) {
+    const w = t ? r.weights[t - 1] : 1;
+    head.append(h("th", { text: `Year ${t}` + (w < 1 ? ` (${fmtG(w * 12)} mo)` : "") }));
+  }
+  const body = h("tbody");
+  for (const [label, key, kind] of ROWS) {
+    const tr = h("tr", { class: ROW_CLASS[key] || null }, h("td", { text: label }));
+    for (let t = 0; t <= n; t++) {
+      const blank = (t === 0 && !YEAR0.has(key)) || (t > 0 && ONLY_YEAR0.has(key));
+      tr.append(h("td", { text: blank ? "" : kind === "money" ? money(r[key][t]) : pct(r[key][t]) }));
+    }
+    body.append(tr);
+  }
+  const colgroup = h("colgroup", {}, h("col", { style: "width:190px" }));
+  table.replaceChildren(colgroup, h("thead", {}, head), body);
+}
+
+/* ------------------------------------------------------------- chart -- */
+const SVG_NS = "http://www.w3.org/2000/svg";
+function s(tag, attrs = {}, text = null) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (text != null) el.textContent = text;
+  return el;
+}
+
+/* Net cash by year: bars rounded at the end away from the zero line. */
+function renderChart(r) {
+  const host = document.getElementById("chart");
+  const W = Math.max(280, host.clientWidth || 700), H = 190;
+  const vals = r.net_cash;
+  const padT = 22, padB = 26;
+  const plotH = H - padT - padB;
+  const hi = Math.max(...vals, 0), lo = Math.min(...vals, 0);
+  const span = (hi - lo) || 1;
+  const zeroY = padT + plotH * (hi / span);
+  const slot = W / vals.length;
+  const bw = Math.max(6, Math.min(slot * 0.44, 56));
+
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+                         "aria-label": "Net cash by year: " + vals.map((v, t) => `year ${t} ${money(v)}`).join(", ") });
+  const hover = s("rect", { class: "slot-hover", x: 0, y: 0, width: slot, height: H - 6, rx: 8, visibility: "hidden" });
+  svg.append(hover);
+  svg.append(s("line", { x1: 0, x2: W, y1: zeroY, y2: zeroY, stroke: "#e8ecf1", "stroke-width": 1 }));
+
+  const tip = h("div", { class: "tip", hidden: true });
+  vals.forEach((v, t) => {
+    const cx = slot * (t + 0.5);
+    const y = zeroY - plotH * (v / span);
+    const up = v >= 0;
+    const x0 = cx - bw / 2, x1 = cx + bw / 2;
+    const len = Math.abs(y - zeroY);
+    const rad = Math.min(4, bw / 2, len);
+    const d = up
+      ? `M${x0},${zeroY} V${y + rad} Q${x0},${y} ${x0 + rad},${y} H${x1 - rad} Q${x1},${y} ${x1},${y + rad} V${zeroY} Z`
+      : `M${x0},${zeroY} V${y - rad} Q${x0},${y} ${x0 + rad},${y} H${x1 - rad} Q${x1},${y} ${x1},${y - rad} V${zeroY} Z`;
+    svg.append(s("path", { d, fill: up ? "#10b981" : "#f43f5e" }));
+    // A negative bar reaches the floor of the plot, so its value sits above the zero line.
+    svg.append(s("text", { x: cx, y: up ? y - 7 : zeroY - 7, "text-anchor": "middle", "font-size": 11,
+                           "font-weight": 600, fill: "#334155" }, money(v)));
+    const w = t ? r.weights[t - 1] : 1;
+    svg.append(s("text", { x: cx, y: H - 8, "text-anchor": "middle", "font-size": 11, fill: "#8794a7" },
+                 `Y${t}` + (w < 1 ? ` (${fmtG(w * 12)} mo)` : "")));
+
+    const hit = s("rect", { class: "hit", x: slot * t, y: 0, width: slot, height: H });
+    const show = () => {
+      hover.setAttribute("x", slot * t);
+      hover.setAttribute("visibility", "visible");
+      tip.replaceChildren(h("b", { text: `Year ${t}` }), h("br"),
+        h("span", { class: "m", text: "Net cash " }), `$${money(v)}`, h("br"),
+        h("span", { class: "m", text: "Cumulative " }), `$${money(r.cumulative[t])}`);
+      tip.hidden = false;
+      const scale = host.clientWidth / W;
+      const left = Math.min(Math.max(cx * scale, 80), host.clientWidth - 80);
+      tip.style.left = left + "px";
+      tip.style.top = Math.min(y, zeroY) * scale + "px";
+    };
+    hit.addEventListener("mouseenter", show);
+    hit.addEventListener("mouseleave", () => { tip.hidden = true; hover.setAttribute("visibility", "hidden"); });
+    svg.append(hit);
+  });
+  host.replaceChildren(svg, tip);
+}
+
+/* ------------------------------------------------------------ actions -- */
+function reset() {
+  ui.revenue.set(D.gross_revenue);
+  ui.growth.setValues(D.rev_growth);
+  ui.term.set(D.term);
+  ui.rates.forEach((s, i) => s.set(D.commission_rates[i]));
+  ui.mix.forEach((s, i) => s.set(D.sales_mix[i]));
+  ui.cogs.setValues(D.cogs);
+  ui.expenses.setValues(D.expenses);
+  ui.merit.set(D.merit);
+  ui.incentive.set(D.incentive_pct);
+  ui.profit.set(D.profit_share_pct);
+  ui.roster.forEach((row, i) => row.restore([D.staff_titles[i], D.staff_starts[i], D.staff_salaries[i]]));
+  ui.capex0.set(D.capex_initial);
+  ui.year0Exp.set(D.year0_expense_pct);
+  ui.bonus.set(D.signing_bonus[0]);
+  ui.bonusYr.setValues(D.signing_bonus.slice(1));
+  ui.capex.setValues(D.capex);
+  applyTerm();
+  recalc();
+}
+
+function localStamp() {
+  const d = new Date(), p2 = v => String(v).padStart(2, "0");
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T` +
+         `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+}
+
+function noteText() {
+  return document.getElementById("note").value.trim().slice(0, 100);
+}
+
+function saveSetup() {
+  saveActive();   // the live controls are the active scenario
+  const data = {
+    format: SETUP_FORMAT,
+    version: SETUP_VERSION,
+    saved: localStamp(),
+    note: noteText(),
+    active,
+    scenarios,
+  };
+  download("roi_setup.json", new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  toast(`Setup downloaded. All ${SCENARIOS} scenarios are in it - every slider, the staff roster, ` +
+        "the note and which scenario was active. Load Setup puts them all back.");
+}
+
+function num(v) {
+  const x = Number(v);
+  if (v === null || v === "" || typeof v === "boolean" || !Number.isFinite(x)) {
+    throw new Error(`"${v}" is not a number`);
+  }
+  return x;
+}
+
+/* Rebuild a scenario from file against the current snapshot shape. Anything
+   missing keeps the value already on screen, so older files still load. */
+function coerce(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("a scenario in that file is not an object");
+  const snap = snapshot();
+  for (const key of ["term", "rev", "capex0", "year0_exp", "bonus", "merit", "incentive", "profit"]) {
+    if (key in raw) snap[key] = num(raw[key]);
+  }
+  if ("roster_open" in raw) snap.roster_open = !!raw.roster_open;
+  for (const key of ["rates", "mix"]) {
+    if (Array.isArray(raw[key])) {
+      const vals = raw[key].slice(0, snap[key].length).map(num);
+      snap[key] = vals.concat(snap[key].slice(vals.length));
+    }
+  }
+  if (Array.isArray(raw.roster)) {
+    snap.roster = snap.roster.map((cur, i) => {
+      const src = raw.roster[i];
+      return Array.isArray(src) && src.length >= 3 ? [String(src[0]), num(src[1]), num(src[2])] : cur;
+    });
+  }
+  if (raw.groups && typeof raw.groups === "object") {
+    for (const [name, cur] of Object.entries(snap.groups)) {
+      const src = raw.groups[name];
+      if (Array.isArray(src) && src.length >= 3 && Array.isArray(src[1])) {
+        const years = src[1].map(num).slice(0, cur[1].length);
+        snap.groups[name] = [num(src[0]), years.concat(cur[1].slice(years.length)), !!src[2]];
+      }
+    }
+  }
+  snap.roi = roiText(compute(paramsFrom(snap)));
+  return snap;
+}
+
+function loadSetupText(text, filename) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    toast("Could not read that file: " + e.message, true);
+    return;
+  }
+  if (!data || typeof data !== "object" || data.format !== SETUP_FORMAT) {
+    toast(`That is not a ${APP_TITLE} setup file. Pick a file written by Save Setup.`, true);
+    return;
+  }
+  if (!Array.isArray(data.scenarios) || !data.scenarios.length) {
+    toast("That setup file has no scenarios.", true);
+    return;
+  }
+  let loaded;
+  try {
+    loaded = data.scenarios.slice(0, SCENARIOS).map(coerce);
+  } catch (e) {
+    toast("That setup file could not be read: " + e.message, true);
+    return;
+  }
+  while (loaded.length < SCENARIOS) loaded.push(snapshot());   // a short file keeps what is here
+
+  scenarios = loaded;
+  active = Math.max(0, Math.min(SCENARIOS - 1, parseInt(data.active, 10) || 0));
+  document.getElementById("note").value = String(data.note || "").slice(0, 100);
+  restore(scenarios[active]);
+  paintScenarios();
+  toast(`Loaded ${filename}. All ${SCENARIOS} scenarios restored; Scenario ${active + 1} is showing.`);
+}
+
+function exportXlsx() {
+  saveActive();
+  try {
+    const bytes = buildWorkbook(scenarios.map(paramsFrom), active, null, noteText());
+    download("roi_model.xlsx",
+             new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  } catch (e) {
+    toast("Could not build the workbook: " + e.message, true);
+    return;
+  }
+  toast(`Workbook downloaded. All ${SCENARIOS} scenarios are included, each on its own sheet with ` +
+        "live formulas - edit any yellow input and Excel recalculates everything, ROI included.");
+}
+
+/* -------------------------------------------------------------- start -- */
+function start() {
+  buildParams();
+  buildScenarioButtons();
+  applyTerm();
+
+  // Every scenario starts from the workbook's opening numbers.
+  scenarios = Array.from({ length: SCENARIOS }, () => snapshot());
+  const opening = roiText(compute(paramsFrom(scenarios[0])));
+  for (const snap of scenarios) snap.roi = opening;
+  paintScenarios();
+  recalc();
+
+  document.getElementById("btn-reset").addEventListener("click", reset);
+  document.getElementById("btn-across").addEventListener("click", saveAcross);
+  document.getElementById("btn-save").addEventListener("click", saveSetup);
+  document.getElementById("btn-export").addEventListener("click", exportXlsx);
+  const fileInput = document.getElementById("setup-file");
+  document.getElementById("btn-load").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    file.text().then(text => loadSetupText(text, file.name),
+                     e => toast("Could not read that file: " + e.message, true));
+    fileInput.value = "";   // so picking the same file again still fires
+  });
+  const note = document.getElementById("note");
+  note.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === "Escape") note.blur(); });
+
+  if (window.ResizeObserver) {
+    let last = 0;
+    new ResizeObserver(() => {
+      const w = document.getElementById("chart").clientWidth;
+      if (w !== last && lastResult) { last = w; renderChart(lastResult); }
+    }).observe(document.getElementById("chart"));
+  }
+}
+
+start();
+</script>
+</body>
+</html>

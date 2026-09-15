@@ -1065,12 +1065,7 @@ class App(tk.Tk):
         self.pay_lbl = ttk.Label(head, text="-", style="Value.TLabel")
         self.pay_lbl.pack(side="right")
         self.pay_sub = ttk.Label(g, text="", style="Tick.TLabel")
-        self.pay_sub.pack(anchor="w", pady=(px(3), px(14)))
-
-        self.s_profit = Slider(g, "Profit Sharing", 0, 10, 0.25,
-                               d["profit_share_pct"], "pct", r,
-                               sub="% of net revenue")
-        self.s_profit.pack(fill="x")
+        self.pay_sub.pack(anchor="w", pady=(px(3), 0))
 
         self.roster_open = tk.BooleanVar(value=False)
         self.roster_link = ttk.Checkbutton(
@@ -1098,7 +1093,11 @@ class App(tk.Tk):
         self.s_incentive = Slider(g, "Incentives & Bonus", 0, 10, 0.25,
                                   d["incentive_pct"], "pct", r,
                                   sub="% of gross revenue")
-        self.s_incentive.pack(fill="x")
+        self.s_incentive.pack(fill="x", pady=(0, px(16)))
+        self.s_profit = Slider(g, "Profit Sharing", 0, 10, 0.25,
+                               d["profit_share_pct"], "pct", r,
+                               sub="% of net revenue")
+        self.s_profit.pack(fill="x")
 
         # Year 0 is no longer just capex: the workbook adds a month of
         # payroll, a start-up expense and a signing bonus to make the
