@@ -1486,17 +1486,17 @@ function buildParams() {
   const capWrap = h("div");
   capWrap.style.marginTop = "14px";
   g.append(capWrap);
-  ui.capex0 = new Slider(capWrap, { label: "Initial Capex (Year 0)", lo: 0, hi: 150, step: 0.25,
+  ui.capex0 = new Slider(capWrap, { label: "Capital Equipment (Pre Move In)", lo: 0, hi: 150, step: 0.25,
                                     value: D.capex_initial, sub: "% of year-1 gross revenue", onChange: r });
-  ui.year0Exp = new Slider(capWrap, { label: "Year-0 Expenses", lo: 0, hi: 10, step: 0.05,
+  ui.year0Exp = new Slider(capWrap, { label: "Pre Move In Expenses", lo: 0, hi: 10, step: 0.05,
                                       value: D.year0_expense_pct, sub: "% of year-1 gross revenue", onChange: r });
-  ui.bonus = new Slider(capWrap, { label: "Signing Bonus (Year 0)", lo: 0, hi: 500000, step: 1000,
+  ui.bonus = new Slider(capWrap, { label: "Signing Bonus (Pre Move In)", lo: 0, hi: 500000, step: 1000,
                                    value: D.signing_bonus[0], kind: "money",
                                    sub: "part of the initial investment", onChange: r });
   ui.bonusYr = new SliderGroup(capWrap, { label: "Signing Bonus (Yearly)", lo: 0, hi: 500000, step: 1000,
                                           def: D.signing_bonus.slice(1), kind: "money",
                                           sub: "each operating year", onChange: r });
-  ui.capex = new SliderGroup(capWrap, { label: "Ongoing Capex", lo: 0, hi: 30, step: 0.25,
+  ui.capex = new SliderGroup(capWrap, { label: "Ongoing Capital Equipment", lo: 0, hi: 30, step: 0.25,
                                         def: D.capex, onChange: r });
 
   ui.groups = { growth: ui.growth, cogs: ui.cogs, expenses: ui.expenses, capex: ui.capex, bonus_yr: ui.bonusYr };

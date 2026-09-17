@@ -36,7 +36,7 @@ GROUPS = {
     "expenses": dict(label="Expenses", lo=0, hi=60, step=0.25,
                      default=DEFAULTS["expenses"], first=1, count=YEARS,
                      note="% of net revenue"),
-    "capex":    dict(label="Ongoing Capex", lo=0, hi=30, step=0.25,
+    "capex":    dict(label="Ongoing Capital Equipment", lo=0, hi=30, step=0.25,
                      default=DEFAULTS["capex"], first=1, count=YEARS),
 }
 # Fixed order: the callbacks below pack their inputs and outputs by position.
@@ -117,11 +117,11 @@ controls = html.Div(className="card", children=[
             slider("profit", "Profit Sharing", 0, 10, 0.25,
                    D["profit_share_pct"], note="% of net revenue")),
     section("Capital",
-            slider("capex0", "Initial Capex (Year 0)", 0, 150, 0.25,
+            slider("capex0", "Capital Equipment (Pre Move In)", 0, 150, 0.25,
                    D["capex_initial"], note="% of year-1 gross revenue"),
-            slider("year0exp", "Year-0 Expenses", 0, 10, 0.05,
+            slider("year0exp", "Pre Move In Expenses", 0, 10, 0.05,
                    D["year0_expense_pct"], note="% of year-1 gross revenue"),
-            slider("bonus", "Signing Bonus (Year 0)", 0, 500_000, 1_000,
+            slider("bonus", "Signing Bonus (Pre Move In)", 0, 500_000, 1_000,
                    D["signing_bonus"][0], kind="money"),
             slider("bonusyr", "Signing Bonus (Yearly)", 0, 500_000, 1_000,
                    D["signing_bonus"][1], kind="money"),

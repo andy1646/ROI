@@ -1133,17 +1133,17 @@ class App(tk.Tk):
         self.invest_sub = ttk.Label(g, text="", style="Tick.TLabel")
         self.invest_sub.pack(anchor="w", pady=(px(3), px(14)))
 
-        self.s_capex0 = Slider(g, "Initial Capex (Year 0)", 0, 150, 0.25,
+        self.s_capex0 = Slider(g, "Capital Equipment (Pre Move In)", 0, 150, 0.25,
                                d["capex_initial"], "pct", r,
                                sub="% of year-1 gross revenue")
         self.s_capex0.pack(fill="x", pady=(0, px(16)))
-        self.s_year0_exp = Slider(g, "Year-0 Expenses", 0, 10, 0.05,
+        self.s_year0_exp = Slider(g, "Pre Move In Expenses", 0, 10, 0.05,
                                   d["year0_expense_pct"], "pct", r,
                                   sub="% of year-1 gross revenue")
         self.s_year0_exp.pack(fill="x", pady=(0, px(16)))
         # The workbook keeps two bonus inputs: D76 lands in year 0 as part of
         # the Initial Investment, E79:J79 recur and are netted off each year.
-        self.s_bonus = Slider(g, "Signing Bonus (Year 0)", 0, 500_000, 1_000,
+        self.s_bonus = Slider(g, "Signing Bonus (Pre Move In)", 0, 500_000, 1_000,
                               d["signing_bonus"][0], "money", r,
                               sub="part of the initial investment")
         self.s_bonus.pack(fill="x", pady=(0, px(16)))
@@ -1152,7 +1152,7 @@ class App(tk.Tk):
                                       r, kind="money",
                                       sub="each operating year")
         self.g_bonus_yr.pack(fill="x", pady=(0, px(16)))
-        self.g_capex = SliderGroup(g, "Ongoing Capex", 0, 30, 0.25, d["capex"], r)
+        self.g_capex = SliderGroup(g, "Ongoing Capital Equipment", 0, 30, 0.25, d["capex"], r)
         self.g_capex.pack(fill="x")
 
         ttk.Frame(inner, style="Card.TFrame", height=px(20)).pack(fill="x")
