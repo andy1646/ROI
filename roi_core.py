@@ -171,7 +171,7 @@ DEFAULTS = {
     "incentive_pct": 1.6,     # % of gross revenue
     "profit_share_pct": 0.89,  # % of net revenue
     "capex_initial": 25.15,   # % of year-1 gross revenue
-    "capex": [0.0] + [3.15] * (MAX_YEARS - 1),          # % of gross revenue
+    "capex": [0.0] + [2.75] * (MAX_YEARS - 1),          # % of gross revenue
     # Year 0 also carries a month of payroll, a start-up expense and a
     # signing bonus; together with capex these make the Initial Investment.
     "year0_expense_pct": 0.7172547150951487,   # % of year-1 gross revenue

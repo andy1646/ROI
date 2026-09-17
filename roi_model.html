@@ -137,6 +137,7 @@ body {
 .roi { font-size: 60px; font-weight: 300; line-height: 1.02; margin: 6px 0 4px;
        color: var(--accent-hi); letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
 .roi.neg { color: #fb7185; }
+.roi.mid { color: #facc15; }
 .hero .hnote { margin: 0; font-size: 12.5px; color: #7c8aa0; }
 .stats { display: flex; flex-wrap: wrap; row-gap: 14px; }
 .stat { padding: 0 20px; border-left: 1px solid var(--hero-2); }
@@ -154,8 +155,8 @@ body {
 /* ----------------------------------------------------------- controls --- */
 .section { padding-top: 19px; }
 .section + .section { border-top: 1px solid var(--hair); margin-top: 21px; }
-.section h2 { font-size: 11px; font-weight: 700; letter-spacing: 1.6px;
-              text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+.section h2 { font-size: 15px; font-weight: 800; letter-spacing: 1.2px;
+              text-transform: uppercase; color: var(--ink); margin: 0 0 14px; }
 
 .ctl + .ctl, .group + .ctl, .ctl + .group, .group + .group { margin-top: 18px; }
 .ctl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -210,8 +211,8 @@ input[type=range]::-moz-range-thumb {
 
 .inset { background: var(--sub); border-radius: 10px; padding: 12px 14px 14px; margin-top: 10px; }
 .inset .ctl + .ctl { margin-top: 12px; }
-.sub-head { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
-            color: var(--muted); margin: 0 0 8px; }
+.sub-head { font-size: 13.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+            color: var(--ink-2); margin: 0 0 8px; }
 .group > .inset:first-child { margin-top: 0; }
 
 .toggle { display: inline-flex; align-items: center; gap: 7px; margin-top: 8px;
@@ -221,6 +222,11 @@ input[type=range]::-moz-range-thumb {
 .role + .role { border-top: 1px solid #e4e9f0; margin-top: 10px; padding-top: 10px; }
 .role .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .role .top span { font-size: 11px; color: var(--muted); }
+.role-group + .role-group { border-top: 1px solid #d5dde7; margin-top: 34px; padding-top: 34px; }
+.role-group .group-head { display: flex; justify-content: space-between; align-items: baseline;
+                          gap: 10px; margin-bottom: 8px; }
+.role-group .group-head .sub-head { margin: 0; }
+.role-group .group-head .tick { margin: 0; white-space: nowrap; }
 
 /* --------------------------------------------------------------- table -- */
 .tbl-wrap { overflow-x: auto; }
@@ -426,7 +432,7 @@ const DEFAULTS = {
   incentive_pct: 1.6,
   profit_share_pct: 0.89,
   capex_initial: 25.15,
-  capex: [0].concat(filled(3.15, MAX_YEARS - 1)),
+  capex: [0].concat(filled(2.75, MAX_YEARS - 1)),
   year0_expense_pct: 0.7172547150951487,
   signing_bonus: [60000].concat(filled(0, MAX_YEARS)),
 };
@@ -1346,7 +1352,8 @@ class RosterRow {
     for (const f of [this.fTitle, this.fStart]) {
       f.addEventListener("change", () => this.edited());
     }
-    this.salary = new Slider(this.el, { label: kind, lo: 0, hi: 300000, step: 500, value: salary,
+    // The position type heads the roster subsection this row sits in.
+    this.salary = new Slider(this.el, { label: "Salary", lo: 0, hi: 300000, step: 500, value: salary,
                                         kind: "money", onChange: () => this.edited() });
     this.noteEl = h("p", { class: "tick" });
     this.el.append(this.noteEl);
@@ -1444,9 +1451,23 @@ function buildParams() {
   ui.rosterBox = h("div", { class: "inset", hidden: true });
   g.append(ui.rosterBox);
   ui.rosterCheck.addEventListener("change", () => { ui.rosterBox.hidden = !ui.rosterCheck.checked; });
-  ui.roster = STAFF.map((s, i) => new RosterRow(ui.rosterBox, {
-    kind: STAFF_TYPES[i], title: D.staff_titles[i], start: D.staff_starts[i],
-    salary: D.staff_salaries[i], load: D.staff_loads[i], onChange: r }));
+  // One subsection per position type, in roster order, each with its loaded subtotal.
+  ui.rosterGroups = [];
+  let grp = null;
+  ui.roster = STAFF.map((s, i) => {
+    if (!grp || grp.kind !== STAFF_TYPES[i]) {
+      grp = { kind: STAFF_TYPES[i], rows: [], total: h("p", { class: "tick" }) };
+      grp.body = h("div");
+      ui.rosterBox.append(h("div", { class: "role-group" },
+        h("div", { class: "group-head" }, h("p", { class: "sub-head", text: grp.kind }), grp.total),
+        grp.body));
+      ui.rosterGroups.push(grp);
+    }
+    grp.rows.push(i);
+    return new RosterRow(grp.body, {
+      kind: STAFF_TYPES[i], title: D.staff_titles[i], start: D.staff_starts[i],
+      salary: D.staff_salaries[i], load: D.staff_loads[i], onChange: r });
+  });
   const payWrap = h("div");
   g.append(payWrap);
   payWrap.style.marginTop = "18px";
@@ -1617,7 +1638,11 @@ function recalc() {
   const $ = id => document.getElementById(id);
 
   $("roi").textContent = roiText(r);
-  $("roi").classList.toggle("neg", (r.roi || 0) < 0);
+  // ROI colour bands, judged on the value as displayed (2 decimals):
+  // red below 6.37%, yellow from 6.37% up to 10%, green at 10% and above.
+  const roiPct = r.roi != null ? Math.round(r.roi * 10000) / 100 : null;
+  $("roi").classList.toggle("neg", roiPct == null || roiPct < 6.37);
+  $("roi").classList.toggle("mid", roiPct != null && roiPct >= 6.37 && roiPct < 10);
   if (ui.scen) ui.scen[active].val.textContent = roiText(r);
   $("stat-invest").textContent = "$" + money(-r.net_cash[0]);
   $("stat-total").textContent = "$" + money(r.total);
@@ -1634,6 +1659,10 @@ function recalc() {
   ui.payLbl.textContent = "$" + money(r.payroll[1]);
   const share = r.net_rev[1] ? r.payroll[1] / r.net_rev[1] : 0;
   ui.paySub.textContent = `${pct(share)} of year-1 net revenue · roster $${money(r.staff_base)} before merit`;
+  for (const g of ui.rosterGroups) {
+    const loaded = g.rows.reduce((a, i) => a + ui.roster[i].salary.get() * (1 + ui.roster[i].load / 100), 0);
+    g.total.textContent = `$${money(loaded)} loaded`;
+  }
   const totalMix = ui.mix.reduce((a, s) => a + s.get(), 0);
   ui.mixLbl.textContent = Math.abs(totalMix - 100) < 0.005
     ? `mix totals ${fmtG(totalMix)}%`

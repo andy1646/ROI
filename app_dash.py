@@ -309,7 +309,15 @@ def recalc(rev, commission, staffbase, merit, incentive, profit,
     })
 
     roi_txt = pct(r["roi"], 2) if r["roi"] is not None else "n/a"
-    roi_cls = "roi" if (r["roi"] or 0) >= 0 else "roi neg"
+    # ROI colour bands, judged on the value as displayed (2 decimals):
+    # red below 6.37%, yellow from 6.37% up to 10%, green at 10% and above.
+    roi_pct = round(r["roi"] * 100, 2) if r["roi"] is not None else None
+    if roi_pct is None or roi_pct < 6.37:
+        roi_cls = "roi neg"
+    elif roi_pct < 10:
+        roi_cls = "roi mid"
+    else:
+        roi_cls = "roi"
 
     rows = []
     for label, key, kind in ROWS:

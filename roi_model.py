@@ -83,6 +83,7 @@ ACCENT_HI = "#34d399"   # emerald 400, on dark
 ACCENT_BG = "#ecfdf5"
 NEG = "#e11d48"
 NEG_2 = "#f43f5e"
+WARN_HI = "#facc15"    # yellow 400, on dark
 
 TRACK = "#e6eaf0"
 KNOB_EDGE = "#cbd5e1"
@@ -98,6 +99,7 @@ _FONT_PREFS = {
     "sb": ["Segoe UI Semibold", "SF Pro Text Semibold", "Helvetica Neue Medium"],
     "sl": ["Segoe UI Semilight", "SF Pro Display Light", "Helvetica Neue Light"],
     "lt": ["Segoe UI Light", "SF Pro Display Light", "Helvetica Neue Light"],
+    "b":  [],   # always the base family, bold-flagged
 }
 _FONTS = {k: ("TkDefaultFont",) for k in _FONT_PREFS}
 
@@ -120,10 +122,11 @@ def resolve_fonts(root):
             _FONTS[weight] = (base, "bold")   # no semibold family: use bold
         else:
             _FONTS[weight] = (base,)          # no light family: use regular
+    _FONTS["b"] = (base, "bold")
 
 
 def F(size, w=""):
-    """The UI font at a given weight: '' regular, 'sb' semibold, 'sl' semilight."""
+    """The UI font at a given weight: '' regular, 'sb' semibold, 'b' bold, 'sl' semilight."""
     spec = _FONTS[w]
     return (spec[0], size) if len(spec) == 1 else (spec[0], size, spec[1])
 
@@ -476,9 +479,8 @@ class RosterRow(ttk.Frame):
         self.f_start.set_text(f"{start:g}")
         self.f_start.pack(side="left")
 
-        # The salary line is labelled with the position's type, straight from
-        # column C of the workbook's staffing table.
-        self.s_salary = Slider(self, kind, 0, 300_000, 500, salary,
+        # The position type heads the roster subsection this row sits in.
+        self.s_salary = Slider(self, "Salary", 0, 300_000, 500, salary,
                                "money", self._edited, style="Sub.TFrame",
                                bg=SUBCARD, field="#e9eef4")
         self.s_salary.pack(fill="x", pady=(px(5), 0))
@@ -492,7 +494,6 @@ class RosterRow(ttk.Frame):
 
     def _refresh(self):
         loaded = self.salary() * (1 + self.load / 100.0)
-        # The type is the slider's label now, so it is not repeated here.
         self.note.config(text=f"{self.load:g}% benefits  \u00b7  "
                               f"${money(loaded)} loaded")
 
@@ -882,10 +883,12 @@ class App(tk.Tk):
         s.configure("Tick.TLabel", background=CARD, foreground=MUTED, font=F(8))
         s.configure("TickSub.TLabel", background=SUBCARD, foreground=MUTED,
                     font=F(8))
-        s.configure("Section.TLabel", background=CARD, foreground=MUTED,
-                    font=F(8, "sb"))
+        s.configure("Section.TLabel", background=CARD, foreground=INK,
+                    font=F(11, "b"))
         s.configure("SubSection.TLabel", background=SUBCARD,
-                    foreground=MUTED, font=F(8, "sb"))
+                    foreground=INK_2, font=F(10, "b"))
+        s.configure("RosterHead.TLabel", background=SUBCARD,
+                    foreground=INK_2, font=F(10, "b"))
         s.configure("Value.TLabel", background=CARD, foreground=INK,
                     font=F(11, "sb"))
         s.configure("Warn.TLabel", background=CARD, foreground=NEG,
@@ -1076,11 +1079,29 @@ class App(tk.Tk):
         self.roster_link.pack(anchor="w", pady=(px(7), 0))
 
         self.roster_box = ttk.Frame(g, style="Sub.TFrame")
+        # One subsection per position type, in roster order, each headed by
+        # the type and its loaded year-1 subtotal.
         self.roster = []
+        self.roster_groups = []   # (subtotal label, row indices)
         for i in range(len(STAFF_TITLES)):
-            if i:
+            if not i or STAFF_TYPES[i] != STAFF_TYPES[i - 1]:
+                if i:
+                    # A blank row, then a rule, between subsections.
+                    tk.Frame(self.roster_box, bg="#d5dde7", height=1).pack(
+                        fill="x", padx=px(13), pady=(px(30), px(20)))
+                head = ttk.Frame(self.roster_box, style="Sub.TFrame")
+                head.pack(fill="x", padx=px(13), pady=(px(11), 0))
+                # Plain uppercase: caps() spacing pushes the longest type
+                # past the width of the parameter panel.
+                ttk.Label(head, text=STAFF_TYPES[i].upper(),
+                          style="RosterHead.TLabel").pack(side="left")
+                total = ttk.Label(head, text="", style="TickSub.TLabel")
+                total.pack(side="right")
+                self.roster_groups.append((total, []))
+            else:
                 tk.Frame(self.roster_box, bg="#e4e9f0", height=1).pack(
                     fill="x", padx=px(13), pady=px(2))
+            self.roster_groups[-1][1].append(i)
             row = RosterRow(self.roster_box, STAFF_TYPES[i],
                             d["staff_titles"][i], d["staff_starts"][i],
                             d["staff_salaries"][i], d["staff_loads"][i], r)
@@ -1413,6 +1434,14 @@ class App(tk.Tk):
 
     # ---------------------------------------------------------- scenarios --
     @staticmethod
+    def _roi_color(roi):
+        """ROI colour bands, judged on the value as displayed (2 decimals):
+        red below 6.37%, yellow from 6.37% up to 10%, green at 10% and above."""
+        if roi is None or round(roi * 100, 2) < 6.37:
+            return NEG_2
+        return WARN_HI if round(roi * 100, 2) < 10 else ACCENT_HI
+
+    @staticmethod
     def _roi_text(r):
         return pct(r["roi"], 2) if r["roi"] is not None else "n/a"
 
@@ -1463,7 +1492,7 @@ class App(tk.Tk):
 
         self.roi_lbl.config(
             text=pct(r["roi"], 2) if r["roi"] is not None else "n/a",
-            fg=ACCENT_HI if (r["roi"] or 0) >= 0 else NEG_2)
+            fg=self._roi_color(r["roi"]))
         if getattr(self, "scen_btns", None):
             self.scen_btns[self.active].set_roi(self._roi_text(r))
         self.stat["invest"].config(text="$" + money(-r["net_cash"][0]))
@@ -1491,6 +1520,10 @@ class App(tk.Tk):
         self.pay_sub.config(
             text=f"{pct(share)} of year-1 net revenue  ·  roster "
                  f"${money(r['staff_base'])} before merit")
+        for total, rows in self.roster_groups:
+            loaded = sum(self.roster[i].salary()
+                         * (1 + self.roster[i].load / 100.0) for i in rows)
+            total.config(text=f"${money(loaded)} loaded")
         total_mix = sum(s.get() for s in self.s_mix)
         self.mix_lbl.config(
             text=f"mix totals {total_mix:g}%",
